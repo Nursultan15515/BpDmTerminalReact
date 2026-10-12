@@ -1,0 +1,6 @@
+@TerminalApi_HostAddress = http://localhost:5115
+
+GET {{TerminalApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

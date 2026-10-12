@@ -1,0 +1,147 @@
+:root {
+  --accent: #1b4d8f;
+  --accent-700: #163f76;
+  --accent-50: #1b4d8f14;
+  --bg: #f2f4f1;
+  --surface: #ffffff;
+  --ink: #1e2a38;
+  --ink-soft: #5a6675;
+  --ink-faint: #94a0ae;
+  --line: #e3e8ef;
+  --radius: 28px;
+  --shadow: 0 1px 2px rgba(20, 33, 51, 0.04), 0 18px 40px -18px rgba(20, 33, 51, 0.18);
+  --shadow-press: 0 1px 2px rgba(20, 33, 51, 0.06);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Включается в main.tsx только в боевой сборке; !important перебивает cursor у кнопок. */
+.hide-cursor,
+.hide-cursor * {
+  cursor: none !important;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: #0e1623;
+  color: var(--ink);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+#stage {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0e1623;
+}
+
+#canvas {
+  width: 1920px;
+  height: 1440px;
+  background: var(--bg);
+  position: relative;
+  overflow: hidden;
+  transform-origin: center center;
+  flex: 0 0 auto;
+}
+
+/* Чек печати: на экране скрыт (его рисует PrintScreen через портал в body),
+   в режиме печати показываем только его, а масштабируемый холст киоска прячем. */
+.print-receipt {
+  display: none;
+}
+
+@media print {
+  body {
+    overflow: visible;
+    background: #fff;
+  }
+  #stage {
+    display: none !important;
+  }
+  .print-receipt {
+    display: block !important;
+  }
+  @page {
+    size: 76mm 120mm;
+    margin: 0;
+  }
+}
+
+@keyframes scrIn {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.992);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.screen {
+  animation: scrIn 0.42s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes popIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes camFlash {
+  0% {
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.92;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes faceScan {
+  0% {
+    transform: translateY(-150px);
+  }
+  100% {
+    transform: translateY(150px);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes ringPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(37, 178, 107, 0.35);
+  }
+  70% {
+    box-shadow: 0 0 0 18px rgba(37, 178, 107, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(37, 178, 107, 0);
+  }
+}

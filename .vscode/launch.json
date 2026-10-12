@@ -1,0 +1,58 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug API",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "Build API",
+      "program": "${workspaceFolder}/backend/TerminalApi/bin/Debug/net10.0-windows/TerminalApi.dll",
+      "cwd": "${workspaceFolder}/backend/TerminalApi",
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "http://localhost:5115;https://localhost:7281"
+      }
+    },
+    {
+      "name": "Run Frontend (Vite server)",
+      "type": "pwa-node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/frontend",
+      "runtimeExecutable": "${env:NVM_SYMLINK}\\npm.cmd",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "3000",
+        "--strictPort"
+      ],
+      "env": {
+        "PATH": "C:\\nvm4w\\nodejs;${env:PATH}"
+      },
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "serverReadyAction": {
+        "action": "startDebugging",
+        "pattern": "Local:\\s+http://",
+        "name": "Frontend (Chrome)"
+      }
+    },
+    {
+      "name": "Frontend (Chrome)",
+      "type": "pwa-chrome",
+      "request": "launch",
+      "url": "http://localhost:3000",
+      "webRoot": "${workspaceFolder}/frontend/src"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Full Stack",
+      "configurations": [
+        "Debug API",
+        "Run Frontend (Vite server)"
+      ]
+    }
+  ]
+}
