@@ -96,16 +96,22 @@ class Cdp {
     this.id = 0;
     this.pending = new Map();
     this.events = [];
+    this.waiters = [];
     this.ws.onmessage = (m) => {
       const msg = JSON.parse(m.data);
       if (msg.id && this.pending.has(msg.id)) {
         const { res, rej } = this.pending.get(msg.id);
         this.pending.delete(msg.id);
         msg.error ? rej(new Error(msg.error.message)) : res(msg.result);
-      } else if (msg.method) this.events.push(msg);
+      } else if (msg.method) {
+        this.events.push(msg);
+        this.waiters = this.waiters.filter((w) => (w.method === msg.method ? (w.res(msg.params), false) : true));
+      }
     };
   }
   open() { return new Promise((res, rej) => { this.ws.onopen = res; this.ws.onerror = rej; }); }
+  // Ближайшее событие CDP с таким именем.
+  once(method) { return new Promise((res) => this.waiters.push({ method, res })); }
   send(method, params = {}) {
     const id = ++this.id;
     this.ws.send(JSON.stringify({ id, method, params }));
@@ -149,6 +155,13 @@ async function click(label) {
   })()`);
   if (!ok) throw new Error(`нет кнопки «${label}»`);
 }
+// Клавиши экранной клавиатуры срабатывают на pointerup.
+const tapKeys = (digits) =>
+  cdp.eval(`(() => { for (const ch of ${JSON.stringify(digits)}) {
+    const k = [...document.querySelectorAll('div')].find((d) => d.children.length === 0 && d.textContent === ch && getComputedStyle(d).borderRadius === '18px');
+    k.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    k.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+  } return true; })()`);
 // Сканер штрих-кода — HID-клавиатура: символы и Enter.
 const scan = (value) =>
   cdp.eval(`(() => { for (const ch of ${JSON.stringify(value)}) window.dispatchEvent(new KeyboardEvent('keydown', { key: ch }));
@@ -304,6 +317,43 @@ async function run() {
     results.push(['PASS', 'галерея: ?screen=&lang= и ?gallery', '']);
   } catch (e) {
     results.push(['FAIL', 'галерея', e.message]);
+  }
+
+  // Брошенный ручной ввод: 60 с без касаний — на главную, касание откладывает возврат. Минуту не ждём:
+  // отдельная вкладка с виртуальным временем Chrome (выключить его потом нельзя — остальным не мешаем).
+  {
+    const main = cdp;
+    try {
+      const tab = await (await fetch(`http://127.0.0.1:${P.cdp}/json/new?about:blank`, { method: 'PUT' })).json();
+      cdp = new Cdp(tab.webSocketDebuggerUrl);
+      await cdp.open();
+      await cdp.send('Page.enable');
+      hw.reset();
+      await open();
+      await click('Начать');
+      await waitText('Введите ИИН или номер документа');
+      await tapKeys('9901');
+      const advance = async (ms) => {
+        const expired = cdp.once('Emulation.virtualTimeBudgetExpired');
+        await cdp.send('Emulation.setVirtualTimePolicy', { policy: 'advance', budget: ms });
+        await expired;
+      };
+      await advance(59000);
+      assert((await text()).includes('Введите ИИН'), 'ушёл с экрана раньше 60 с');
+      await cdp.eval(`document.querySelector('.screen').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))`);
+      await advance(59000);
+      assert((await text()).includes('Введите ИИН'), 'касание не отложило возврат');
+      await advance(2000);
+      await waitText('Правила получения пропуска', 3000);
+      results.push(['PASS', 'ручной ввод: 60 с без касаний — на главную, касание откладывает возврат', '']);
+    } catch (e) {
+      results.push(['FAIL', 'ручной ввод: автовозврат', e.message]);
+    } finally {
+      if (cdp !== main) {
+        try { await cdp.send('Page.close'); } catch { /* вкладка уже закрыта */ }
+        cdp = main;
+      }
+    }
   }
 
   // Шрифт Inter — из сборки (у терминалов нет интернета), с казахскими буквами: они в подмножестве

@@ -1,8 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { PressBtn } from '../PressBtn';
 import { Keyboard, type KbMode } from '../Keyboard';
 import { Arrow, BackIcon, SearchIcon } from '../icons';
 import { useI18n } from '../i18n';
+
+// Брошенный ручной ввод сам уходит на главную — и не оставляет набранный номер на экране.
+// Отсчёт начинается заново с каждого касания экрана.
+const IDLE_MS = 60000;
 
 export function ManualScreen({
   accent,
@@ -16,7 +20,13 @@ export function ManualScreen({
   const { t } = useI18n();
   const [value, setValue] = useState('');
   const [mode, setMode] = useState<KbMode>('num');
+  const [touches, setTouches] = useState(0);
   const max = 12;
+
+  useEffect(() => {
+    const id = setTimeout(onBack, IDLE_MS);
+    return () => clearTimeout(id);
+  }, [touches, onBack]);
 
   const addChar = (c: string) => setValue((v) => (v.length >= max ? v : v + c));
   const back = () => setValue((v) => v.slice(0, -1));
@@ -26,6 +36,7 @@ export function ManualScreen({
   return (
     <div
       className="screen"
+      onPointerDown={() => setTouches((n) => n + 1)}
       style={{
         position: 'absolute',
         inset: 0,
