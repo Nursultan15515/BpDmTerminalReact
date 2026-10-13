@@ -119,7 +119,8 @@ class Cdp {
 }
 
 let cdp;
-const text = () => cdp.eval('document.body.innerText');
+// Пока страница грузится, body может ещё не быть (старый Chrome успевает выполнить проверку раньше).
+const text = () => cdp.eval("document.body ? document.body.innerText : ''");
 async function waitText(s, timeout = 15000) {
   const t0 = Date.now();
   while (Date.now() - t0 < timeout) {
@@ -305,19 +306,47 @@ async function run() {
     results.push(['FAIL', 'галерея', e.message]);
   }
 
-  // Боевая сборка: курсор скрыт, галереи нет; в dev курсор виден.
+  // Шрифт Inter — из сборки (у терминалов нет интернета), с казахскими буквами: они в подмножестве
+  // cyrillic-ext, его браузер грузит только когда такие буквы есть на экране.
+  const fontsOf = () => cdp.eval(`(async () => {
+    await document.fonts.ready;
+    const faces = [...document.fonts].filter((f) => f.family.replace(/["']/g, '') === 'Inter' && f.status === 'loaded');
+    return { weights: [...new Set(faces.map((f) => f.weight))].sort().join(','), cyrillicExt: faces.some((f) => f.unicodeRange.includes('U+460-52F')) };
+  })()`);
+  const fontsOk = (f) => ['500', '600', '700', '800'].every((w) => f.weights.split(',').includes(w)) && f.cyrillicExt;
+  try {
+    await open(`http://127.0.0.1:${P.vite}/?lang=KK`, 'Рұқсаттаманы алу ережелері');
+    const dev = await fontsOf();
+    assert(fontsOk(dev), `dev: ${JSON.stringify(dev)}`);
+    results.push(['PASS', 'шрифт Inter из сборки, казахские буквы — тоже Inter', `начертания ${dev.weights}`]);
+  } catch (e) {
+    results.push(['FAIL', 'шрифт Inter', e.message]);
+  }
+
+  // Боевая сборка: курсор скрыт, галереи нет, шрифт свой; в dev курсор виден.
   try {
     const cursorOf = () => cdp.eval(`(() => { const b = [...document.querySelectorAll('body *')].find((el) => (el.innerText || '').trim() === 'Начать');
       return { cls: document.documentElement.classList.contains('hide-cursor'), cursor: getComputedStyle(b).cursor }; })()`);
     await open(`http://127.0.0.1:${P.preview}/?gallery`);
     const prod = await cursorOf();
+    await click('ҚАЗ');
+    await waitText('Рұқсаттаманы алу ережелері');
+    const prodFonts = await fontsOf();
     await open();
     const dev = await cursorOf();
     assert(prod.cls && prod.cursor === 'none' && !dev.cls && dev.cursor === 'pointer', `prod ${JSON.stringify(prod)}, dev ${JSON.stringify(dev)}`);
-    results.push(['PASS', 'боевая сборка: курсор скрыт, ?gallery не работает; в dev курсор виден', '']);
+    assert(fontsOk(prodFonts), `шрифт в боевой сборке: ${JSON.stringify(prodFonts)}`);
+    results.push(['PASS', 'боевая сборка: курсор скрыт, ?gallery не работает, Inter свой; в dev курсор виден', '']);
   } catch (e) {
     results.push(['FAIL', 'боевая сборка', e.message]);
   }
+
+  // Изолированная сеть: за весь прогон ни одного запроса за пределы этого ПК.
+  const external = [...new Set(cdp.events
+    .filter((e) => e.method === 'Network.requestWillBeSent')
+    .map((e) => e.params.request.url)
+    .filter((u) => /^https?:/.test(u) && !/^https?:\/\/(127\.0\.0\.1|localhost)[:/]/.test(u)))];
+  results.push([external.length === 0 ? 'PASS' : 'FAIL', 'нет запросов во внешнюю сеть', external.slice(0, 5).join(' ')]);
 
   const proxied = allCalls.filter((c) => c.srv === 'api' && /\/api\/hardware|cards-ended/.test(c.path));
   results.push([proxied.length === 0 ? 'PASS' : 'FAIL', 'фронт не ходит в /api/hardware и cards-ended', proxied.length ? `${proxied.length} вызовов` : '']);
@@ -366,7 +395,8 @@ try {
   await cdp.send('Runtime.enable');
   await cdp.send('Page.enable');
   await cdp.send('Network.enable');
-  // Изолированная сеть: Google Fonts недоступны (тест не зависит от интернета).
+  // Как в изолированной сети терминалов: Google Fonts недоступны. Если их снова подключат,
+  // это поймает проверка «нет запросов во внешнюю сеть».
   await cdp.send('Network.setBlockedURLs', { urls: ['*fonts.googleapis.com*', '*fonts.gstatic.com*'] });
   await open(); // прогрев: Vite оптимизирует зависимости при первом заходе
   await sleep(1000);
