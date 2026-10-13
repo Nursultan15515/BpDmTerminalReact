@@ -32,6 +32,9 @@ export function Gallery() {
         Экран открывается сразу, с тестовыми данными. Диспенсер — эмулятор:{' '}
         <a href={HARDWARE_URL} target="_blank" rel="noreferrer">{HARDWARE_URL}</a> (панель управления и журнал выдачи).
       </p>
+      <p style={{ color: '#5a6675', marginTop: 4 }}>
+        Распознавание удостоверения (камера, файл, тестовая карта): <a href="/?idscan">/?idscan</a> — есть и в боевой сборке.
+      </p>
 
       <div style={{ marginTop: 18, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <b>Соотношение:</b>

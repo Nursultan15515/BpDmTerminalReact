@@ -8,6 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "e2e": "node e2e/kiosk.e2e.mjs",
+    "e2e:idscan": "node e2e/idscan.e2e.mjs",
+    "test": "node --test --disable-warning=ExperimentalWarning \"test/**/*.test.mjs\"",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -15,12 +17,14 @@
     "@emotion/styled": "^11.14.1",
     "@fontsource/inter": "^5.3.0",
     "@mui/joy": "^5.0.0-beta.52",
+    "@tesseract.js-data/eng": "^1.0.0",
     "@types/jsbarcode": "^3.11.4",
     "axios": "^1.20.0",
     "jsbarcode": "^3.12.3",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
-    "react-webcam": "^7.2.0"
+    "react-webcam": "^7.2.0",
+    "tesseract.js": "^6.0.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
