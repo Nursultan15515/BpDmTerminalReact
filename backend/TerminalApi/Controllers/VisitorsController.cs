@@ -14,6 +14,7 @@ public class VisitorsController : ControllerBase
     private readonly ITerminalResolver _resolver;
     private readonly ITerminalLogService _log;
     private readonly IFaceDetectionService _faceDetection;
+    private readonly IPhotoBorderService _photoBorder;
     private readonly ILogger<VisitorsController> _logger;
 
     public VisitorsController(
@@ -21,12 +22,14 @@ public class VisitorsController : ControllerBase
         ITerminalResolver resolver,
         ITerminalLogService log,
         IFaceDetectionService faceDetection,
+        IPhotoBorderService photoBorder,
         ILogger<VisitorsController> logger)
     {
         _soap = soap;
         _resolver = resolver;
         _log = log;
         _faceDetection = faceDetection;
+        _photoBorder = photoBorder;
         _logger = logger;
     }
 
@@ -79,7 +82,7 @@ public class VisitorsController : ControllerBase
         return Ok(lookup.Card);
     }
 
-    // Сохранение фото посетителя (легаси: Home/SavePhoto). Рамку для типа 3 ставит сервис.
+    // Сохранение фото посетителя (легаси: Home/SavePhoto).
     [HttpPost("photo")]
     public async Task<IActionResult> SavePhoto([FromBody] SavePhotoRequest req, CancellationToken ct)
     {
@@ -120,10 +123,15 @@ public class VisitorsController : ControllerBase
                 return UnprocessableEntity(new { error = "no_face", message = "Лицо не распознано. Переснимите фото." });
         }
 
+        // Тип 3 (испытательный срок/временный пропуск) — фото с красной рамкой (легаси: ServiceHelper.SetVisitorsPhoto).
+        // Рамку ставим до SOAP-клиента, чтобы её получала и заглушка стенда.
+        if (req.DictPassCardTypeId == 3)
+            photo = _photoBorder.AddRedBorder(photo);
+
         ServiceResult result;
         try
         {
-            result = await _soap.SetVisitorsPhotoAsync(req.CardId, photo, req.DictPassCardTypeId, terminalName, ct);
+            result = await _soap.SetVisitorsPhotoAsync(req.CardId, photo, terminalName, ct);
         }
         catch (Exception ex) when (IsSoapFailure(ex))
         {

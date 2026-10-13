@@ -292,8 +292,8 @@ const COPY: Record<Lang, Dict> = { KK: kk, RU: ru, EN: en };
 type Ctx = { lang: Lang; setLang: (l: Lang) => void; t: Dict };
 const I18nContext = createContext<Ctx | null>(null);
 
-export function I18nProvider({ children }: { children: ReactNode }) {
-  const [lang, setLang] = useState<Lang>('RU');
+export function I18nProvider({ children, initialLang }: { children: ReactNode; initialLang?: Lang }) {
+  const [lang, setLang] = useState<Lang>(initialLang ?? 'RU');
   return <I18nContext.Provider value={{ lang, setLang, t: COPY[lang] }}>{children}</I18nContext.Provider>;
 }
 

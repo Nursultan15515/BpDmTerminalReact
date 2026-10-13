@@ -14,6 +14,32 @@
       }
     },
     {
+      "name": "Debug API (стенд)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "Prepare stand",
+      "program": "${workspaceFolder}/backend/TerminalApi/bin/Debug/net10.0-windows/TerminalApi.dll",
+      "cwd": "${workspaceFolder}/backend/TerminalApi",
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "http://localhost:5115;https://localhost:7281"
+      }
+    },
+    {
+      "name": "Fake dispenser",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/dev/fake-dispenser.mjs",
+      "runtimeExecutable": "${env:NVM_SYMLINK}\\node.exe",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "(http://localhost:\\d+/)",
+        "uriFormat": "%s"
+      }
+    },
+    {
       "name": "Run Frontend (Vite server)",
       "type": "pwa-node",
       "request": "launch",
@@ -47,6 +73,14 @@
     }
   ],
   "compounds": [
+    {
+      "name": "Стенд (без терминала)",
+      "configurations": [
+        "Debug API (стенд)",
+        "Run Frontend (Vite server)",
+        "Fake dispenser"
+      ]
+    },
     {
       "name": "Full Stack",
       "configurations": [

@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "e2e": "node e2e/kiosk.e2e.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

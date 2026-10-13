@@ -7,8 +7,8 @@ public interface ITerminalSoapClient
     /// <summary>Ищет посетителя по номеру документа. Found=false означает «пропуск не найден» (Status=false от сервиса).</summary>
     Task<VisitorLookupResult> GetVisitorAsync(string documentNumber, string terminalName, CancellationToken ct = default);
 
-    /// <summary>Сохраняет фото посетителя. Для dictPassCardTypeId==3 фото получает красную рамку.</summary>
-    Task<ServiceResult> SetVisitorsPhotoAsync(string cardId, string base64Photo, int dictPassCardTypeId, string terminalName, CancellationToken ct = default);
+    /// <summary>Сохраняет фото посетителя (чистый base64, рамку для типа 3 уже поставил контроллер).</summary>
+    Task<ServiceResult> SetVisitorsPhotoAsync(string cardId, string base64Photo, string terminalName, CancellationToken ct = default);
 
     /// <summary>Регистрирует выданный RFID-номер за пропуском.</summary>
     Task<ServiceResult> SetVisitorsRfidAsync(string cardId, string rfidNumber, string terminalName, CancellationToken ct = default);

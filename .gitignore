@@ -284,3 +284,6 @@ __pycache__/
 /DataModel/obj
 /WEB/Files
 /packages
+
+# Стенд разработки: снимки, которые заглушка SOAP «отправила» бы в сервис
+stub-photos/

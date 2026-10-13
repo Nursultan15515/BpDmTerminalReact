@@ -12,6 +12,19 @@
       "problemMatcher": "$msCompile"
     },
     {
+      "label": "Init dev DB",
+      "type": "process",
+      "command": "sqlcmd",
+      "args": ["-S", "(localdb)\\MSSQLLocalDB", "-E", "-b", "-i", "${workspaceFolder}\\dev\\db\\init-dev-db.sql"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Prepare stand",
+      "dependsOn": ["Init dev DB", "Build API"],
+      "dependsOrder": "sequence",
+      "problemMatcher": []
+    },
+    {
       "label": "Run API",
       "type": "shell",
       "command": "dotnet run",

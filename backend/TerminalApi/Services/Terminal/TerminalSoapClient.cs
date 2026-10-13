@@ -9,13 +9,11 @@ namespace TerminalApi.Services.Terminal;
 public sealed class TerminalSoapClient : ITerminalSoapClient
 {
     private readonly TerminalSoapOptions _options;
-    private readonly IPhotoBorderService _photoBorder;
     private readonly ILogger<TerminalSoapClient> _logger;
 
-    public TerminalSoapClient(IOptions<TerminalSoapOptions> options, IPhotoBorderService photoBorder, ILogger<TerminalSoapClient> logger)
+    public TerminalSoapClient(IOptions<TerminalSoapOptions> options, ILogger<TerminalSoapClient> logger)
     {
         _options = options.Value;
-        _photoBorder = photoBorder;
         _logger = logger;
     }
 
@@ -44,15 +42,12 @@ public sealed class TerminalSoapClient : ITerminalSoapClient
         }
     }
 
-    public async Task<ServiceResult> SetVisitorsPhotoAsync(string cardId, string base64Photo, int dictPassCardTypeId, string terminalName, CancellationToken ct = default)
+    public async Task<ServiceResult> SetVisitorsPhotoAsync(string cardId, string base64Photo, string terminalName, CancellationToken ct = default)
     {
-        // Тип 3 (испытательный срок/временный пропуск) — фото с красной рамкой.
-        var photo = dictPassCardTypeId == 3 ? _photoBorder.AddRedBorder(base64Photo) : base64Photo;
-
         var request = new RequestPhoto
         {
             RequestInfo = BuildRequestInfo(terminalName),
-            RequestData = new RequestPhotoData { CardID = cardId, Base64Photo = photo },
+            RequestData = new RequestPhotoData { CardID = cardId, Base64Photo = base64Photo },
         };
 
         var client = CreateClient();

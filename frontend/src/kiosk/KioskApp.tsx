@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ACCENT, resolveCanvas, type ResultType, type Screen, type VisitorCard } from './constants';
 import { errorText, getCardStatus, reportCardStatus, reportError, searchVisitor } from './api';
+import { readDevStart } from './devStart';
 import { StatusBar } from './StatusBar';
 import { WelcomeScreen } from './screens/WelcomeScreen';
 import { ManualScreen } from './screens/ManualScreen';
@@ -21,12 +22,14 @@ export function KioskApp() {
   const canvasRef = useRef<HTMLDivElement>(null);
   // Соотношение холста фиксируем один раз на монтировании (экран киоска не меняется).
   const canvasSize = useRef(resolveCanvas());
-  const [screen, setScreen] = useState<Screen>('welcome');
-  const [query, setQuery] = useState('');
-  const [resultType, setResultType] = useState<ResultType>('loading');
-  const [card, setCard] = useState<VisitorCard | null>(null);
+  // Галерея экранов (только dev): старт сразу с экрана из ?screen=, см. devStart.ts.
+  const [devStart] = useState(readDevStart);
+  const [screen, setScreen] = useState<Screen>(devStart?.screen ?? 'welcome');
+  const [query, setQuery] = useState(devStart?.query ?? '');
+  const [resultType, setResultType] = useState<ResultType>(devStart?.resultType ?? 'loading');
+  const [card, setCard] = useState<VisitorCard | null>(devStart?.card ?? null);
   const [source, setSource] = useState<Source>('scan');
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(devStart?.settingsOpen ?? false);
 
   // Каждые 10 возвратов на главный экран перезагружаем страницу целиком — сбрасываем
   // накопленные за сутки утечки (в т.ч. от камеры), чтобы киоск не деградировал до зависания.
