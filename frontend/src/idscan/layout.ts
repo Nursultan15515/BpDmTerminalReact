@@ -24,6 +24,12 @@ export const ZONES: Record<'iin' | 'dob' | 'mrz', Rect> = {
   mrz: { x: 0.03, y: 0.58, w: 0.95, h: 0.4 },
 };
 
+/** Строки 1 и 2 MRZ по отдельности: центры на 0,685 и 0,787 высоты карты, высота строки ~0,045. */
+export const MRZ_LINES: Rect[] = [
+  { x: 0.03, y: 0.63, w: 0.95, h: 0.11 },
+  { x: 0.03, y: 0.732, w: 0.95, h: 0.11 },
+];
+
 /** Где зона карты (в долях ровной карты) лежит на кадре — с учётом рамки карты и её поворота. */
 export function zoneOnFrame(card: Rect, zone: Rect, rotation: Rotation): Rect {
   const { x, y, w, h } = zone;

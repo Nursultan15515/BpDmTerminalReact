@@ -1,6 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, type CSSProperties } from 'react';
 import { PressBtn } from '../PressBtn';
-import { HomeIcon } from '../icons';
+import { CameraIcon, HomeIcon } from '../icons';
 import { applyRatioSetting, getRatioSetting, type RatioSetting } from '../constants';
 
 const AUTO_RETURN_MS = 30000;
@@ -76,27 +76,31 @@ export function SettingsScreen({ accent, onClose }: { accent: string; onClose: (
         })}
       </div>
 
-      <PressBtn
-        onClick={onClose}
-        style={{
-          marginTop: 72,
-          height: 96,
-          padding: '0 56px',
-          borderRadius: 24,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 16,
-          fontSize: 32,
-          fontWeight: 800,
-          color: 'var(--ink-soft)',
-          background: 'var(--surface)',
-          border: '1.5px solid var(--line)',
-          boxShadow: 'var(--shadow-press)',
-        }}
-      >
-        <HomeIcon /> Закрыть
-      </PressBtn>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 28, marginTop: 72, justifyContent: 'center' }}>
+        {/* Тестовая страница распознавания удостоверения: выбрать камеру документа и рамку карты. */}
+        <PressBtn onClick={() => window.location.assign(`${import.meta.env.BASE_URL}?idscan`)} style={SECONDARY}>
+          <CameraIcon color="#5A6675" /> Распознавание удостоверения
+        </PressBtn>
+        <PressBtn onClick={onClose} style={SECONDARY}>
+          <HomeIcon /> Закрыть
+        </PressBtn>
+      </div>
     </div>
   );
 }
+
+const SECONDARY: CSSProperties = {
+  height: 96,
+  padding: '0 56px',
+  borderRadius: 24,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 16,
+  fontSize: 32,
+  fontWeight: 800,
+  color: 'var(--ink-soft)',
+  background: 'var(--surface)',
+  border: '1.5px solid var(--line)',
+  boxShadow: 'var(--shadow-press)',
+};

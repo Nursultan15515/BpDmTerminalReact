@@ -10,6 +10,8 @@ import { parseIin, type IinInfo } from './iin.ts';
 
 export interface MrzInfo {
   documentNumber: string;
+  /** Контрольная цифра номера документа сошлась; false — номер прочитан с ошибкой, ИИН взят по его месту в строке. */
+  documentChecked: boolean;
   iin: IinInfo;
   /** Дата рождения из строки 2, ДД.ММ.ГГГГ; null — строка 2 не прочиталась. */
   birthDate: string | null;
@@ -46,6 +48,7 @@ const dmy = (yymmdd: string, century: number) => `${yymmdd.slice(4, 6)}.${yymmdd
 interface Line1 {
   documentNumber: string;
   check: string;
+  checked: boolean;
   iin: IinInfo;
 }
 
@@ -57,7 +60,15 @@ function parseLine1(line: string, today: Date): Line1 | null {
     const iinText = toDigits(line.slice(i + 10, i + 22));
     if (!isDigits(documentNumber + check + iinText) || mrzCheckDigit(documentNumber) !== Number(check)) continue;
     const iin = parseIin(iinText, today);
-    if (iin) return { documentNumber, check, iin };
+    if (iin) return { documentNumber, check, checked: true, iin };
+  }
+  // Номер документа прочитан с ошибкой, но начало строки узнаётся («KAZ» в первых знаках) — ИИН берём с его места:
+  // после «KAZ» 9 знаков номера и контрольная, затем 12 цифр. Проверен такой ИИН только своей контрольной цифрой.
+  const anchor = /K[A4][Z2]/.exec(line.slice(0, 7));
+  if (anchor) {
+    const k = anchor.index + 3;
+    const iin = parseIin(toDigits(line.slice(k + 10, k + 22)), today);
+    if (iin) return { documentNumber: toDigits(line.slice(k, k + 9)), check: toDigits(line[k + 9] ?? ''), checked: false, iin };
   }
   return null;
 }
@@ -122,13 +133,15 @@ export function findMrz(text: string, today = new Date()): MrzInfo[] {
     const l2 = lines.slice(n + 1, n + 3).map(parseLine2).find((l) => l !== null) ?? null;
     const year = Number(l1.iin.birthDate.slice(6));
     let composite: boolean | null = null;
-    if (l2 && l2.composite !== null) {
+    // Номер документа прочитан с ошибкой — общая контрольная не сойдётся из-за него, об ИИН она тогда ничего не скажет.
+    if (l2 && l2.composite !== null && l1.checked) {
       // Поля строки 1 с 6-й позиции (номер, контрольная, ИИН и три заполнителя) + даты строки 2 + 11 заполнителей.
       const field = `${l1.documentNumber}${l1.check}${l1.iin.iin}<<<${l2.dob}${l2.dobCheck}${l2.expiry}${l2.expiryCheck}${'<'.repeat(11)}`;
       composite = mrzCheckDigit(field) === l2.composite;
     }
     found.push({
       documentNumber: l1.documentNumber,
+      documentChecked: l1.checked,
       iin: l1.iin,
       birthDate: l2 ? dmy(l2.dob, year - (year % 100)) : null,
       expiry: l2 ? dmy(l2.expiry, 2000) : null,

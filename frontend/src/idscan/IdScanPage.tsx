@@ -35,6 +35,8 @@ interface Saved {
   mode?: ScanMode;
   binarization?: Binarization;
   readDob?: boolean;
+  autoCard?: boolean;
+  autoLayout?: boolean;
 }
 
 const STORAGE_KEY = 'idscan';
@@ -135,7 +137,21 @@ function Box({ rect, color, label }: { rect: Rect; color: string; label: string 
 }
 
 /** Кадр с рамкой карты и зонами; рамку рисуют мышью или пальцем прямо по изображению. */
-function Viewer({ children, active, card, rotation, onCard }: { children: ReactNode; active: boolean; card: Rect; rotation: Rotation; onCard: (r: Rect) => void }) {
+function Viewer({
+  children,
+  active,
+  card,
+  cardLabel,
+  rotation,
+  onCard,
+}: {
+  children: ReactNode;
+  active: boolean;
+  card: Rect;
+  cardLabel: string;
+  rotation: Rotation;
+  onCard: (r: Rect) => void;
+}) {
   const start = useRef<{ x: number; y: number } | null>(null);
   const [draft, setDraft] = useState<Rect | null>(null);
   const at = (e: PointerEvent<HTMLDivElement>) => {
@@ -176,7 +192,7 @@ function Viewer({ children, active, card, rotation, onCard }: { children: ReactN
       {children}
       {active && (
         <>
-          <Box rect={draft ?? card} color="#00b8d4" label={draft ? 'новая рамка' : 'карта'} />
+          <Box rect={draft ?? card} color="#00b8d4" label={draft ? 'новая рамка' : cardLabel} />
           {!draft && <Box rect={zoneOnFrame(card, ZONES.mrz, rotation)} color="#b388ff" label="MRZ (оборот)" />}
           {!draft && <Box rect={zoneOnFrame(card, ZONES.iin, rotation)} color="#ffab00" label="ИИН" />}
           {!draft && <Box rect={zoneOnFrame(card, ZONES.dob, rotation)} color="#64dd17" label="дата" />}
@@ -218,6 +234,8 @@ export function IdScanPage() {
   const [mode, setMode] = useState<ScanMode>(saved.mode ?? 'auto');
   const [binarization, setBinarization] = useState<Binarization>(saved.binarization ?? 'none');
   const [readDob, setReadDob] = useState(saved.readDob ?? true);
+  const [autoCard, setAutoCard] = useState(saved.autoCard ?? true);
+  const [autoLayout, setAutoLayout] = useState(saved.autoLayout ?? true);
 
   const [running, setRunning] = useState(false);
   const [stopOnConfirm, setStopOnConfirm] = useState(true);
@@ -304,8 +322,8 @@ export function IdScanPage() {
     source === 'camera' ? (cameraCard ?? (videoSize ? defaultCardRect(videoSize.width, videoSize.height, rotation) : FULL_FRAME)) : pictureCard;
   const { x: cx, y: cy, w: cw, h: ch } = card;
   const scanOptions = useMemo<ScanOptions>(
-    () => ({ card: { x: cx, y: cy, w: cw, h: ch }, rotation, mode, binarization, readDob }),
-    [cx, cy, cw, ch, rotation, mode, binarization, readDob],
+    () => ({ card: { x: cx, y: cy, w: cw, h: ch }, autoCard, rotation, autoLayout, mode, binarization, readDob }),
+    [cx, cy, cw, ch, autoCard, rotation, autoLayout, mode, binarization, readDob],
   );
 
   const record = useCallback((r: ScanResult, live: boolean): Streak => {
@@ -415,12 +433,18 @@ export function IdScanPage() {
   };
 
   const changeCard = (r: Rect | null) => {
+    // Рамку нарисовали руками — значит, карта там, где нарисовано: автопоиск выключаем.
+    const auto = r ? false : autoCard;
+    if (auto !== autoCard) {
+      setAutoCard(auto);
+      save({ autoCard: auto });
+    }
     if (source === 'camera') {
       setCameraCard(r);
       save({ cameraCard: r });
     } else {
       setPictureCard(r ?? FULL_FRAME);
-      rerun({ card: r ?? FULL_FRAME });
+      rerun({ card: r ?? FULL_FRAME, autoCard: auto });
     }
   };
 
@@ -440,16 +464,21 @@ export function IdScanPage() {
   };
 
   const iin = result?.iin ?? null;
-  const confirmed = iin !== null && (source !== 'camera' || streak.count >= CONFIRM_STREAK);
+  // Мелкая карта и ИИН не проверен общей контрольной MRZ — одному прочтению не верим: ошибка в одной цифре вероятна.
+  const doubtful = !!result?.smallText && result.mrz?.composite !== true;
+  const confirmed = iin !== null && (source === 'camera' ? streak.count >= CONFIRM_STREAK : !doubtful);
   const dobMatch = iin && result?.cardDob ? sameDob(result.cardDob, iin.birthDate) : null;
   const testVerdict = testCard && result && !busy ? result.iin?.iin === testCard.iin.iin : null;
   const ready = ocrState === 'ready';
+  // Карту нашли на кадре — показываем найденную рамку, зоны — от неё.
+  const shownCard = autoCard && result?.cardFound ? result.card : card;
+  const cardLabel = !autoCard ? 'карта' : !result ? 'карта · автопоиск' : result.cardFound ? 'карта найдена' : 'не найдена — по рамке';
 
   return (
     <div style={page}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, flexWrap: 'wrap' }}>
         <h1 style={{ fontSize: 24, fontWeight: 800 }}>Распознавание удостоверения</h1>
-        <a href="/">← к киоску</a>
+        <a href={import.meta.env.BASE_URL}>← к киоску</a>
       </div>
       <p style={{ ...muted, marginTop: 4 }}>
         ИИН удостоверения РК — с лицевой стороны (сверка с датой рождения) или из MRZ на обороте. Кадры никуда не
@@ -465,7 +494,7 @@ export function IdScanPage() {
       <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap', marginTop: 14 }}>
         {/* Слева — кадр */}
         <div style={{ flex: '1 1 560px', minWidth: 0 }}>
-          <Viewer active={frame !== null} card={card} rotation={rotation} onCard={changeCard}>
+          <Viewer active={frame !== null} card={shownCard} cardLabel={cardLabel} rotation={result?.rotation ?? rotation} onCard={changeCard}>
             {source === 'camera' ? (
               <video
                 ref={videoRef}
@@ -715,13 +744,37 @@ export function IdScanPage() {
               />
               Читать дату рождения на карте (сверка с ИИН)
             </label>
+            <label style={{ ...row, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={autoCard}
+                onChange={(e) => {
+                  setAutoCard(e.target.checked);
+                  save({ autoCard: e.target.checked });
+                  rerun({ autoCard: e.target.checked });
+                }}
+              />
+              Искать карту на кадре
+            </label>
+            <label style={{ ...row, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={autoLayout}
+                onChange={(e) => {
+                  setAutoLayout(e.target.checked);
+                  save({ autoLayout: e.target.checked });
+                  rerun({ autoLayout: e.target.checked });
+                }}
+              />
+              Угадывать сторону и положение (переворот)
+            </label>
             <div style={row}>
               <button type="button" style={btn()} onClick={() => changeCard(null)}>
                 Рамка по умолчанию
               </button>
               <span style={{ ...muted, fontSize: 13 }}>
-                Авто: сначала зона ИИН, не нашлось — вся карта. Поворот — на сколько повернуть карту по часовой, чтобы она
-                встала ровно.
+                Авто: сначала зоны, не нашлось — вся карта. Поворот — на сколько повернуть карту по часовой, чтобы она
+                встала ровно. Поиск карты — для камеры издалека и фото с рук; нарисованная рамка его выключает.
               </span>
             </div>
           </div>
@@ -735,7 +788,17 @@ export function IdScanPage() {
                 {iin?.iin ?? '—'}
               </span>
               <span style={muted}>
-                {busy ? 'распознаю…' : !result ? 'ещё не распознавали' : !iin ? 'ИИН не найден' : confirmed ? 'ИИН прочитан' : 'найден в 1 кадре — жду подтверждения'}
+                {busy
+                  ? 'распознаю…'
+                  : !result
+                    ? 'ещё не распознавали'
+                    : !iin
+                      ? 'ИИН не найден'
+                      : confirmed
+                        ? 'ИИН прочитан'
+                        : source === 'camera'
+                          ? 'найден в 1 кадре — жду подтверждения'
+                          : 'найден, но карта мелкая — не доверяю одному прочтению'}
               </span>
             </div>
             {scanError && <p style={{ color: '#c62828', marginTop: 8 }}>Ошибка: {scanError}</p>}
@@ -743,13 +806,14 @@ export function IdScanPage() {
               <ul style={{ margin: '10px 0 0 18px' }}>
                 {iin && (
                   <li>
-                    {result.side === 'back' ? 'Из MRZ на обороте' : 'С лицевой стороны'}: контрольная цифра и дата в ИИН верны —{' '}
+                    {result.side === 'back' ? 'Из MRZ на обороте' : 'По 12 цифрам ИИН'}: контрольная цифра и дата в ИИН верны —{' '}
                     {iin.birthDate}, {iin.male ? 'мужской' : 'женский'}
                   </li>
                 )}
                 {result.mrz && (
                   <li>
                     MRZ: документ № {result.mrz.documentNumber}
+                    {!result.mrz.documentChecked && ' (номер прочитан с ошибкой — ИИН взят по месту в строке)'}
                     {result.mrz.expiry && `, действует до ${result.mrz.expiry}`}; общая контрольная цифра{' '}
                     {result.mrz.composite === null ? (
                       'не прочиталась'
@@ -764,6 +828,26 @@ export function IdScanPage() {
                   <li>
                     Дата рождения {result.side === 'back' ? 'в MRZ' : 'на карте'}: {result.cardDob ?? 'не прочитана'}
                     {dobMatch !== null && <b style={{ color: dobMatch ? '#2e7d32' : '#c62828' }}>{dobMatch ? ' — совпадает с ИИН' : ' — не совпадает с ИИН'}</b>}
+                  </li>
+                )}
+                {result.cardFound !== null && <li>Карта на кадре: {result.cardFound ? 'найдена' : 'не найдена — читаю по рамке'}</li>}
+                {result.layout && (
+                  <li data-idscan-layout={`${result.layout.side ?? '?'}:${result.layout.turn}`}>
+                    По картинке: {result.layout.side === 'back' ? 'оборот' : result.layout.side === 'front' ? 'лицевая' : 'сторона не ясна'}
+                    {result.layout.turn ? `, повёрнута — ставлю на ${result.layout.turn}°` : ', стоит ровно'}
+                    {result.rotation !== (result.layout.turn + rotation) % 360 && ` (прочитана в другом положении: ${result.rotation}°)`}
+                    <span style={{ ...muted, fontSize: 13 }}>
+                      {' '}· признаки {result.layout.turns.map((t, i) => {
+                        const f = result.layout!.features[i];
+                        return `${t}°: MRZ ${f.mrz.toFixed(2)}, штрихкод ${f.barcode.toFixed(1)}, фото ${f.photo.toFixed(2)}`;
+                      }).join('; ')}
+                    </span>
+                  </li>
+                )}
+                {result.smallText && (
+                  <li style={{ color: '#b26a00' }}>
+                    Карта на кадре мелкая (ниже 250 px): символы ~6–10 px, ошибка в одной цифре вероятна. Поднесите карту
+                    ближе или поставьте разрешение камеры выше.
                   </li>
                 )}
                 {source === 'camera' && (

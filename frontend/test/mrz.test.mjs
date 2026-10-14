@@ -3,7 +3,7 @@
 // Данные выдуманные: MRZ собирается из корректного вымышленного ИИН, настоящих документов здесь нет.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseIin } from '../src/idscan/iin.ts';
+import { findIins, parseIin } from '../src/idscan/iin.ts';
 import { cleanMrzLine, findMrz, makeMrz, mrzCheckDigit } from '../src/idscan/mrz.ts';
 import { decide } from '../src/idscan/verdict.ts';
 
@@ -29,7 +29,7 @@ test('MRZ удостоверения: три строки по 30 знаков, 
 
 test('разбор MRZ: ИИН, дата рождения, срок, пол, общая контрольная', () => {
   assert.deepEqual(findMrz(mrzOf(MAN).join('\n')), [
-    { documentNumber: '012345678', iin: MAN, birthDate: '20.03.1985', expiry: '01.06.2030', sex: 'M', composite: true },
+    { documentNumber: '012345678', documentChecked: true, iin: MAN, birthDate: '20.03.1985', expiry: '01.06.2030', sex: 'M', composite: true },
   ]);
   assert.equal(findMrz(mrzOf(WOMAN).join('\n'))[0].sex, 'F');
 });
@@ -79,6 +79,26 @@ test('ошибка в 11-й цифре ИИН: своя контрольная �
   const v = decide([], [], [m]);
   assert.equal(v.iin, null);
   assert.deepEqual(v.rejected.map((r) => r.reason), ['не сошлась общая контрольная цифра MRZ']);
+});
+
+test('номер документа прочитан с ошибкой — ИИН берётся по месту после «KAZ», общая контрольная не считается', () => {
+  const [l1, l2] = mrzOf(MAN);
+  // Как на снимке с веб-камеры: D→P в «ID», две ошибки в номере документа.
+  const noisy = `IP${l1.slice(2, 6)}9${l1.slice(7, 12)}3${l1.slice(13)}`;
+  const [m] = findMrz(`${noisy}\n${l2}`);
+  assert.equal(m.iin.iin, '850320300125');
+  assert.equal(m.documentChecked, false);
+  assert.equal(m.composite, null);
+  assert.equal(m.birthDate, '20.03.1985');
+  assert.equal(decide([], [], [m]).iin?.iin, '850320300125');
+  // Без узнаваемого начала строки ИИН по месту не берём.
+  assert.deepEqual(findMrz(noisy.slice(5)), []);
+});
+
+test('длинная цепочка цифр (строка MRZ, прочитанная как число) — ИИН только в последних 12', () => {
+  assert.deepEqual(findIins('190123456789850320300125').map((i) => i.iin), ['850320300125']);
+  // Последние 12 — не ИИН: случайный «ИИН» внутри номера документа не берём.
+  assert.deepEqual(findIins('850320300125123').map((i) => i.iin), []);
 });
 
 test('без второй строки MRZ ИИН принимается, но без полной проверки', () => {

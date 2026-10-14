@@ -123,6 +123,17 @@ async function scenario(name, fn) {
     results.push(['FAIL', name, e.message]);
   }
 }
+const LAYOUT = 'Угадывать сторону и положение (переворот)';
+// Догадка страницы о стороне и положении карты («front:0», «back:180»…) — должна совпасть с тем, что нарисовано.
+async function layoutIs(name, expected) {
+  await scenario(name, async () => {
+    const got = await attr('data-idscan-layout');
+    const details = await cdp.eval(`document.querySelector('[data-idscan-layout]')?.innerText ?? ''`);
+    assert(got === expected, `по картинке «${got}», ожидали «${expected}»: ${details}`);
+    return details.replace(/^.*· признаки /, '');
+  });
+}
+
 // Нажать то, что перечитывает картинку, и дождаться результата.
 async function act(label, timeout) {
   const before = await count();
@@ -184,7 +195,23 @@ async function stress(title, n) {
 }
 
 async function run(base, title) {
-  await cdp.send('Page.navigate', { url: `${base}/?idscan` });
+  // Вход как на терминале: удержать «Терминал готов к работе» 3 с → настройка экрана → «Распознавание удостоверения».
+  await scenario(`${title}: вход из настройки экрана киоска`, async () => {
+    await cdp.send('Page.navigate', { url: `${base}/` });
+    // Блок с удержанием: сам текст — его собственный текстовый узел (рядом точка-индикатор и часы).
+    const ready = `[...document.querySelectorAll('div')].find((d) => [...d.childNodes].some((n) => n.nodeType === 3 && n.textContent.includes('Терминал готов к работе')))`;
+    await waitFor(`!!(${ready})`, 'главный экран киоска'); // DOM-узел по значению не передаётся — только true/false
+    await cdp.eval(`${ready}.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))`);
+    await waitFor(`document.body.innerText.includes('Разрешение экрана')`, 'экран настройки', 6000);
+    const clicked = await cdp.eval(`(() => {
+      const btn = [...document.querySelectorAll('div')].find((d) => d.innerText.trim() === 'Распознавание удостоверения');
+      btn?.click();
+      return !!btn;
+    })()`);
+    assert(clicked, 'на экране настройки нет кнопки «Распознавание удостоверения»');
+    await waitFor(`location.search === '?idscan' && !!document.querySelector('[data-idscan-status]')`, 'страница распознавания');
+  });
+  if (!(await cdp.eval(`location.search === '?idscan'`))) await cdp.send('Page.navigate', { url: `${base}/?idscan` });
   const status = await waitFor(
     `document.querySelector('[data-idscan-status="ready"], [data-idscan-status="error"]')?.innerText`,
     'загрузка распознавания',
@@ -207,26 +234,35 @@ async function run(base, title) {
   });
 
   await readsTestCard(`${title}: тестовая карта, режим «Авто»`, 'Тестовая карта');
+  await layoutIs(`${title}: по картинке — лицевая, ровно`, 'front:0');
   await readsTestCard(`${title}: режим «Зона ИИН»`, 'Зона ИИН');
   await readsTestCard(`${title}: новая карта, «Зона ИИН»`, 'Новая карта');
   await readsTestCard(`${title}: режим «Вся карта»`, 'Вся карта');
   await readsTestCard(`${title}: снова «Авто»`, 'Авто');
   await readsTestCard(`${title}: мелкая карта (60 %)`, '60 %');
   await readsTestCard(`${title}: обычная карта (100 %)`, '100 %');
-  await scenario(`${title}: карта вверх ногами без поворота не читается`, async () => {
-    const r = await act('вверх ногами');
+
+  // Положение карты: перевёрнутую страница ставит ровно сама; без угадывания — только ручной поворот.
+  await readsTestCard(`${title}: вверх ногами — переворачивается сама`, 'вверх ногами');
+  await layoutIs(`${title}: по картинке — лицевая, 180°`, 'front:180');
+  await act(LAYOUT);
+  await scenario(`${title}: без угадывания вверх ногами не читается`, async () => {
+    const r = await act('Новая карта');
     assert(r.got !== r.expected, 'прочитана без поворота — тогда проверка поворота ничего не доказывает');
     return r.got ? `прочитано «${r.got}»` : 'ИИН не найден';
   });
-  await readsTestCard(`${title}: вверх ногами, поворот 180°`, '180°');
-  await act('вверх ногами'); // ровная карта при повороте 180° — не читается, просто ждём
+  await readsTestCard(`${title}: вверх ногами, поворот 180° вручную`, '180°');
+  await act('вверх ногами'); // ровная карта при повороте 180° без угадывания — не читается, просто ждём
   await readsTestCard(`${title}: ровная карта, поворот 0°`, '0°');
+  await act(LAYOUT);
+
   await readsTestCard(`${title}: порог Оцу`, 'Оцу');
   await readsTestCard(`${title}: адаптивный порог`, 'адаптивный');
   await act('нет');
 
   // Оборот: ИИН из MRZ, проверенный общей контрольной цифрой.
   await readsTestCard(`${title}: оборот (MRZ), режим «Авто»`, 'Оборот');
+  await layoutIs(`${title}: по картинке — оборот, ровно`, 'back:0');
   // Общая контрольная читается не на каждой карте (≈80 % — см. IDSCAN_STRESS): ждём её хотя бы на одной из пяти.
   await scenario(`${title}: оборот — ИИН из MRZ проверен целиком`, async () => {
     for (let attempt = 1; ; attempt++) {
@@ -240,6 +276,9 @@ async function run(base, title) {
   await readsTestCard(`${title}: оборот, режим «Зона ИИН»`, 'Зона ИИН');
   await readsTestCard(`${title}: оборот, режим «Вся карта»`, 'Вся карта');
   await act('Авто');
+  await readsTestCard(`${title}: оборот вверх ногами — переворачивается сам`, 'вверх ногами');
+  await layoutIs(`${title}: по картинке — оборот, 180°`, 'back:180');
+  await act('вверх ногами');
   await act('Лицевая');
 
   if (STRESS && title === 'сборка') await stress(title, STRESS);
@@ -252,12 +291,14 @@ async function realImage(title, image, expect) {
   const { root } = await cdp.send('DOM.getDocument');
   const { nodeId } = await cdp.send('DOM.querySelector', { nodeId: root.nodeId, selector: 'input[type=file]' });
   const report = async (r) => {
-    const found = await cdp.eval(`(document.body.innerText.match(/(С лицевой стороны|Из MRZ на обороте):/) ?? [])[1] ?? ''`);
+    const found = await cdp.eval(`(document.body.innerText.match(/(По 12 цифрам ИИН|Из MRZ на обороте):/) ?? [])[1] ?? ''`);
     const dob = await cdp.eval(`(document.body.innerText.match(/Дата рождения (?:на карте|в MRZ): ([^\\n]+)/) ?? [])[1] ?? ''`);
     const mrz = await cdp.eval(`(document.body.innerText.match(/общая контрольная цифра ([^\\n]+)/) ?? [])[1] ?? ''`);
     if (expect) assert(r.got === expect, `прочитано «${r.got}», ожидали ${expect}`);
     const raw = `\n      текст: ${(await rawTexts()).slice(0, 600)}`;
-    return `ИИН: ${r.got || 'не найден'}${found ? ` (${found.toLowerCase()})` : ''}; дата: ${dob || '—'}${mrz ? `; MRZ: ${mrz}` : ''}; ${r.ms} мс${raw}`;
+    const layout = await cdp.eval(`document.querySelector('[data-idscan-layout]')?.innerText ?? ''`);
+    return `ИИН: ${r.got || 'не найден'}${found ? ` (${found.toLowerCase()})` : ''}; дата: ${dob || '—'}${mrz ? `; MRZ: ${mrz}` : ''}; ${r.ms} мс` +
+      `${layout ? `\n      ${layout}` : ''}${raw}`;
   };
   await scenario(`${title}: своё фото (${path.basename(image)}), режим «Авто»`, async () => {
     const before = await count();

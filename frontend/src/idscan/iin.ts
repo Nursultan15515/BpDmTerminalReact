@@ -60,11 +60,12 @@ export function findIins(text: string, today = new Date()): IinInfo[] {
     // Распознавание иногда рвёт число пробелами — склеиваем соседние группы цифр.
     const joined = line.split(/\s+/).map(fixDigits).join(' ').replace(/(\d) (?=\d)/g, '$1');
     for (const run of joined.match(/\d{12,}/g) ?? []) {
-      // Лишние цифры по краям (кусок подписи, край карты) — перебираем все окна по 12 цифр.
-      for (let i = 0; i + 12 <= run.length; i++) {
-        const info = parseIin(run.slice(i, i + 12), today);
-        if (info && !found.has(info.iin)) found.set(info.iin, info);
-      }
+      // Длиннее 14 цифр — это строка MRZ (номер документа, контрольная и ИИН в конце): берём только последние 12,
+      // иначе внутри номера документа найдётся случайный «корректный ИИН». Короче — ИИН с цифрой-двумя мусора
+      // по краям (кусок подписи, край карты): принимаем, только если корректное окно одно.
+      const windows = run.length > 14 ? [run.slice(-12)] : Array.from({ length: run.length - 11 }, (_, i) => run.slice(i, i + 12));
+      const valid = windows.map((w) => parseIin(w, today)).filter((info) => info !== null);
+      if (valid.length === 1 && !found.has(valid[0].iin)) found.set(valid[0].iin, valid[0]);
     }
   }
   return [...found.values()];

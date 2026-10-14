@@ -77,11 +77,8 @@ export function applyThreshold(img: Gray, threshold: number): void {
   for (let i = 0; i < img.data.length; i++) img.data[i] = img.data[i] > threshold ? 255 : 0;
 }
 
-/**
- * Адаптивный порог (Брэдли): пиксель темнее среднего по окну на долю k — чёрный.
- * В отличие от Оцу, выдерживает неровный свет и блик на части вырезки.
- */
-export function adaptiveThreshold(img: Gray, windowSize = Math.max(15, Math.round(img.height / 2)), k = 0.15): void {
+/** Среднее по квадратному окну (2r+1)² вокруг каждого пикселя — через интегральную картинку. */
+function boxMean(img: Gray, r: number): Float32Array {
   const { width: w, height: h, data } = img;
   const stride = w + 1;
   const integral = new Float64Array(stride * (h + 1));
@@ -92,8 +89,7 @@ export function adaptiveThreshold(img: Gray, windowSize = Math.max(15, Math.roun
       integral[y * stride + x] = integral[(y - 1) * stride + x] + row;
     }
   }
-  const r = Math.floor(windowSize / 2);
-  const out = new Uint8ClampedArray(data.length);
+  const mean = new Float32Array(data.length);
   for (let y = 0; y < h; y++) {
     const y0 = Math.max(0, y - r);
     const y1 = Math.min(h, y + r + 1);
@@ -101,9 +97,26 @@ export function adaptiveThreshold(img: Gray, windowSize = Math.max(15, Math.roun
       const x0 = Math.max(0, x - r);
       const x1 = Math.min(w, x + r + 1);
       const sum = integral[y1 * stride + x1] - integral[y0 * stride + x1] - integral[y1 * stride + x0] + integral[y0 * stride + x0];
-      const mean = sum / ((x1 - x0) * (y1 - y0));
-      out[y * w + x] = data[y * w + x] < mean * (1 - k) ? 0 : 255;
+      mean[y * w + x] = sum / ((x1 - x0) * (y1 - y0));
     }
   }
-  data.set(out);
+  return mean;
+}
+
+/**
+ * Адаптивный порог (Брэдли): пиксель темнее среднего по окну на долю k — чёрный.
+ * В отличие от Оцу, выдерживает неровный свет и блик на части вырезки.
+ */
+export function adaptiveThreshold(img: Gray, windowSize = Math.max(15, Math.round(img.height / 2)), k = 0.15): void {
+  const mean = boxMean(img, Math.floor(windowSize / 2));
+  for (let i = 0; i < img.data.length; i++) img.data[i] = img.data[i] < mean[i] * (1 - k) ? 0 : 255;
+}
+
+/**
+ * Нерезкая маска: пиксель + amount × (пиксель − среднее вокруг). После сильного увеличения мелкий текст размыт,
+ * и распознавание путает 5 с 3, 8 с 0 — маска возвращает контраст на краях штрихов.
+ */
+export function sharpen(img: Gray, radius: number, amount = 1): void {
+  const mean = boxMean(img, radius);
+  for (let i = 0; i < img.data.length; i++) img.data[i] = img.data[i] + amount * (img.data[i] - mean[i]);
 }
