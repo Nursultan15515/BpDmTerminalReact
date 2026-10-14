@@ -71,6 +71,18 @@ try
         app.UseHttpsRedirection();
     }
 
+    // Собранный фронт (frontend/dist, при публикации кладётся в wwwroot) отдаётся с того же адреса,
+    // что и /api: в IIS это один сайт. Файлы из assets/ с хэшем в имени кэшируются навсегда,
+    // index.html проверяется при каждой загрузке — после выкладки терминалы сразу берут новую версию.
+    app.UseDefaultFiles();
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        OnPrepareResponse = ctx =>
+            ctx.Context.Response.Headers.CacheControl = ctx.Context.Request.Path.StartsWithSegments("/assets")
+                ? "public, max-age=31536000, immutable"
+                : "no-cache",
+    });
+
     app.MapGet("/api/ping", () => Results.Ok(new { message = "pong", time = DateTime.UtcNow }));
 
     app.MapControllers();

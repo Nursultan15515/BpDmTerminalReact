@@ -30,4 +30,27 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
   </ItemGroup>
+
+  <!-- Публикация (Visual Studio или dotnet publish): собираем фронт и кладём его в wwwroot,
+       чтобы в IIS киоск и /api были одним сайтом. На машине, где публикуют, нужен Node.js (npm).
+       Сборка идёт в obj, а не в frontend/dist — публикация не меняет файлы в репозитории. -->
+  <PropertyGroup>
+    <FrontendDir>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..\..\frontend\'))</FrontendDir>
+  </PropertyGroup>
+  <Target Name="PublishFrontend" AfterTargets="ComputeFilesToPublish">
+    <PropertyGroup>
+      <!-- Без завершающего \ — иначе он экранирует кавычку в командной строке. -->
+      <FrontendOut>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\$(IntermediateOutputPath)frontend-dist'))</FrontendOut>
+    </PropertyGroup>
+    <Exec Command="npm ci" WorkingDirectory="$(FrontendDir)" Condition="!Exists('$(FrontendDir)node_modules')" />
+    <Exec Command="npm run build -- --outDir &quot;$(FrontendOut)&quot; --emptyOutDir" WorkingDirectory="$(FrontendDir)" />
+    <ItemGroup>
+      <FrontendDist Include="$(FrontendOut)\**" />
+      <ResolvedFileToPublish Include="@(FrontendDist->'%(FullPath)')" Exclude="@(ResolvedFileToPublish)">
+        <RelativePath>wwwroot\%(RecursiveDir)%(FileName)%(Extension)</RelativePath>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+        <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+  </Target>
 </Project>
