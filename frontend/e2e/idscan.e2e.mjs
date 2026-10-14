@@ -233,6 +233,18 @@ async function run(base, title) {
     return `кадр ${await cdp.eval(`(() => { const v = document.querySelector('video'); return v.videoWidth + '×' + v.videoHeight; })()`)}, ${r.ms} мс`;
   });
 
+  await scenario(`${title}: кнопка «Переключить камеру»`, async () => {
+    const label = `document.querySelector('[data-idscan-camera]')?.getAttribute('data-idscan-camera') ?? ''`;
+    await waitFor(`!!(${label})`, 'название камеры');
+    const before = await cdp.eval(label);
+    await click('Переключить камеру');
+    const after = await cdp.eval(label);
+    assert(after && after !== before, `название камеры не сменилось: ${before}`);
+    // Видео действительно идёт со второй камеры, а не только подпись сменилась.
+    await waitFor(`document.querySelector('video')?.srcObject?.getVideoTracks()[0]?.label === ${JSON.stringify(after)}`, 'видео со второй камеры');
+    return `${before} → ${after}`;
+  });
+
   await readsTestCard(`${title}: тестовая карта, режим «Авто»`, 'Тестовая карта');
   await layoutIs(`${title}: по картинке — лицевая, ровно`, 'front:0');
   await readsTestCard(`${title}: режим «Зона ИИН»`, 'Зона ИИН');
@@ -321,7 +333,8 @@ try {
 
   browser = spawn(findBrowser(), [
     '--headless=new', `--remote-debugging-port=${P.cdp}`, `--user-data-dir=${path.join(TMP, 'profile')}`,
-    '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream',
+    // Две поддельные камеры — как на терминале (лицо и документ).
+    '--use-fake-device-for-media-stream=device-count=2', '--use-fake-ui-for-media-stream',
     '--no-first-run', '--no-default-browser-check', '--window-size=1600,1000', 'about:blank',
   ], { stdio: 'ignore' });
   let wsUrl;

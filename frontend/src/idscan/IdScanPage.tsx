@@ -30,7 +30,8 @@ interface HistoryRow {
 interface Saved {
   deviceId?: string;
   resolution?: string;
-  cameraCard?: Rect | null;
+  /** Рамка карты — своя для каждой камеры (ключ — deviceId): у камеры документа и камеры лица они разные. */
+  cameraCards?: Record<string, Rect>;
   rotation?: Rotation;
   mode?: ScanMode;
   binarization?: Binarization;
@@ -221,7 +222,9 @@ export function IdScanPage() {
   const [resolution, setResolution] = useState(saved.resolution ?? RESOLUTIONS[0]);
   const [videoSize, setVideoSize] = useState<{ width: number; height: number } | null>(null);
   const [cameraError, setCameraError] = useState('');
-  const [cameraCard, setCameraCard] = useState<Rect | null>(saved.cameraCard ?? null);
+  // Какая камера реально включилась (при «камере по умолчанию» deviceId пустой).
+  const [activeDeviceId, setActiveDeviceId] = useState('');
+  const [cameraCards, setCameraCards] = useState<Record<string, Rect>>(saved.cameraCards ?? {});
 
   const [picture, setPicture] = useState<Picture | null>(null);
   const [pictureCard, setPictureCard] = useState<Rect>(FULL_FRAME);
@@ -299,6 +302,7 @@ export function IdScanPage() {
         }
         stream = s;
         if (video) video.srcObject = s;
+        setActiveDeviceId(s.getVideoTracks()[0]?.getSettings().deviceId ?? '');
         setCameraError('');
         // Названия камер браузер отдаёт только после разрешения на камеру.
         const list = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput');
@@ -317,6 +321,9 @@ export function IdScanPage() {
     };
   }, [source, deviceId, resolution]);
 
+  const cameraKey = deviceId || activeDeviceId;
+  const cameraCard = cameraCards[cameraKey] ?? null;
+  const cameraIndex = devices.findIndex((d) => d.deviceId === cameraKey);
   const frame = source === 'camera' ? videoSize : picture && { width: picture.width, height: picture.height };
   const card: Rect =
     source === 'camera' ? (cameraCard ?? (videoSize ? defaultCardRect(videoSize.width, videoSize.height, rotation) : FULL_FRAME)) : pictureCard;
@@ -440,12 +447,23 @@ export function IdScanPage() {
       save({ autoCard: auto });
     }
     if (source === 'camera') {
-      setCameraCard(r);
-      save({ cameraCard: r });
+      const next = { ...cameraCards };
+      if (r) next[cameraKey] = r;
+      else delete next[cameraKey];
+      setCameraCards(next);
+      save({ cameraCards: next });
     } else {
       setPictureCard(r ?? FULL_FRAME);
       rerun({ card: r ?? FULL_FRAME, autoCard: auto });
     }
+  };
+
+  // На терминале две камеры (лицо и документ) — переключаем по кругу; выбор запоминается в этом браузере.
+  const switchCamera = () => {
+    if (devices.length < 2) return;
+    const next = devices[(cameraIndex + 1) % devices.length].deviceId;
+    setDeviceId(next);
+    save({ deviceId: next });
   };
 
   const shot = () => {
@@ -539,6 +557,24 @@ export function IdScanPage() {
                   </p>
                 )}
                 {cameraError && <p style={{ color: '#c62828', marginTop: 10 }}>Камера: {cameraError}</p>}
+                <div style={row}>
+                  <button
+                    type="button"
+                    style={{ ...btn(false, devices.length < 2), padding: '12px 20px', fontWeight: 700 }}
+                    disabled={devices.length < 2}
+                    onClick={switchCamera}
+                  >
+                    Переключить камеру
+                  </button>
+                  <span style={muted} data-idscan-camera={devices[cameraIndex]?.label ?? ''}>
+                    {devices.length === 0
+                      ? 'камеры ещё не найдены'
+                      : cameraIndex < 0
+                        ? `камер: ${devices.length}`
+                        : `Камера ${cameraIndex + 1} из ${devices.length}: ${devices[cameraIndex].label || 'без названия'}`}
+                    {devices.length === 1 && ' — других камер браузер не видит, переключать не на что'}
+                  </span>
+                </div>
                 <div style={row}>
                   <select
                     value={deviceId}
