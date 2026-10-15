@@ -2,9 +2,11 @@ import { PressBtn } from '../PressBtn';
 import { Arrow } from '../icons';
 import { LangSwitch } from '../LangSwitch';
 import { useI18n } from '../i18n';
+import { HOLD_MS, useHold } from '../useHold';
 
-export function WelcomeScreen({ accent, onStart }: { accent: string; onStart: () => void }) {
+export function WelcomeScreen({ accent, onStart, onHold }: { accent: string; onStart: () => void; onHold?: () => void }) {
   const { t, lang, setLang } = useI18n();
+  const { holding, handlers } = useHold(onHold);
 
   return (
     <div
@@ -22,18 +24,27 @@ export function WelcomeScreen({ accent, onStart }: { accent: string; onStart: ()
       </div>
 
       <div style={{ textAlign: 'center', flexShrink: 0 }}>
+        {/* Второй вход в настройку для наладчика (первый — статус-бар): удержание HOLD_MS. За это время плашка
+            заливается акцентом; текст белеет быстро и около середины — плавно он на полпути сливался бы с фоном. */}
         <div
+          {...handlers}
           style={{
             display: 'inline-flex',
             alignItems: 'center',
             gap: 12,
             padding: '10px 22px',
             borderRadius: 999,
-            background: 'var(--accent-50)',
-            color: accent,
+            backgroundColor: holding ? accent : 'var(--accent-50)',
+            color: holding ? '#fff' : accent,
+            transition: holding
+              ? `background-color ${HOLD_MS}ms linear, color 120ms linear ${HOLD_MS * 0.45}ms`
+              : 'background-color .2s ease, color .2s ease',
             fontSize: 24,
             fontWeight: 700,
             marginBottom: 22,
+            cursor: onHold ? 'pointer' : 'default',
+            touchAction: 'none',
+            userSelect: 'none',
           }}
         >
           {t.welcome.kicker}

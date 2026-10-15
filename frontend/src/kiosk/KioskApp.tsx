@@ -105,13 +105,15 @@ export function KioskApp() {
   }, []);
 
   const retryScreen = () => setScreen(source);
+  // Вход в настройку удержанием: статус-бар на любом экране и «Бюро пропусков» на главной.
+  const openSettings = () => setSettingsOpen(true);
 
   return (
     <div id="stage">
       <div id="canvas" ref={canvasRef}>
-        <StatusBar show onHold={() => setSettingsOpen(true)} />
+        <StatusBar show onHold={openSettings} />
 
-        {screen === 'welcome' && <WelcomeScreen accent={ACCENT} onStart={handleStart} />}
+        {screen === 'welcome' && <WelcomeScreen accent={ACCENT} onStart={handleStart} onHold={openSettings} />}
         {screen === 'choose' && (
           <ChooseScreen
             accent={ACCENT}

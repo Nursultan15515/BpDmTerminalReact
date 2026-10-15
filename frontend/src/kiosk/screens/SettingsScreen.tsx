@@ -13,7 +13,7 @@ const OPTIONS: { id: RatioSetting; title: string; hint: string }[] = [
   { id: '16:9', title: '16:9', hint: '1920 × 1080' },
 ];
 
-// Служебный экран для наладчика (вход — удержание статус-бара 3 с). Не для посетителя.
+// Служебный экран для наладчика (вход — удержание 3 с статус-бара или «Бюро пропусков» на главной). Не для посетителя.
 export function SettingsScreen({ accent, onClose }: { accent: string; onClose: () => void }) {
   const current = getRatioSetting();
 

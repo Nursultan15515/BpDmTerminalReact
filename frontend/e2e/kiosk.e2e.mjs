@@ -419,6 +419,25 @@ async function run() {
     results.push(['FAIL', 'галерея', e.message]);
   }
 
+  // Второй вход в настройку для наладчика (первый — статус-бар): удержание «Бюро пропусков» 3 с.
+  await scenario('настройка: удержание «Бюро пропусков» 3 с открывает, отпустил раньше — нет', async () => {
+    const chip = `[...document.querySelectorAll('div')].find((d) => [...d.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim() === 'Бюро пропусков'))`;
+    const press = (type) => cdp.eval(`${chip}.dispatchEvent(new PointerEvent(${JSON.stringify(type)}, { bubbles: true }))`);
+    await press('pointerdown');
+    await sleep(1500);
+    await press('pointerup');
+    await sleep(2500);
+    assert(!(await text()).includes('Разрешение экрана'), 'настройка открылась от короткого касания');
+    const t0 = Date.now();
+    await press('pointerdown');
+    await waitText('Разрешение экрана', 6000);
+    const held = Date.now() - t0;
+    assert(held >= 2900, `настройка открылась раньше 3 с: ${held} мс`);
+    await click('Закрыть');
+    await waitText('Правила получения пропуска');
+    return `открылась через ${held} мс`;
+  });
+
   // Брошенный ручной ввод: 60 с без касаний — на главную, касание откладывает возврат. Минуту не ждём:
   // отдельная вкладка с виртуальным временем Chrome (выключить его потом нельзя — остальным не мешаем).
   {

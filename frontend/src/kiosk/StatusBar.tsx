@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useI18n } from './i18n';
 import { ACCENT } from './constants';
-
-const HOLD_MS = 3000;
+import { HOLD_MS, useHold } from './useHold';
 
 function Clock() {
   const [t, setT] = useState(new Date());
@@ -21,24 +20,7 @@ function Clock() {
 
 export function StatusBar({ show, onHold }: { show: boolean; onHold?: () => void }) {
   const { t } = useI18n();
-  const [holding, setHolding] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-
-  const cancel = () => {
-    clearTimeout(timer.current);
-    setHolding(false);
-  };
-
-  const start = () => {
-    if (!onHold) return;
-    setHolding(true);
-    timer.current = setTimeout(() => {
-      setHolding(false);
-      onHold();
-    }, HOLD_MS);
-  };
-
-  useEffect(() => () => clearTimeout(timer.current), []);
+  const { holding, handlers } = useHold(onHold);
 
   if (!show) return null;
   return (
@@ -64,10 +46,7 @@ export function StatusBar({ show, onHold }: { show: boolean; onHold?: () => void
       {/* Удержание 3 с открывает настройку разрешения. Слушает только этот блок,
           чтобы не перехватывать тап по переключателю языков справа. */}
       <div
-        onPointerDown={start}
-        onPointerUp={cancel}
-        onPointerLeave={cancel}
-        onPointerCancel={cancel}
+        {...handlers}
         style={{
           display: 'flex',
           alignItems: 'center',
