@@ -45,7 +45,7 @@ public class VisitorsController : ControllerBase
         var ip = ClientIp;
         var searchValue = req?.SearchValue?.Trim();
 
-        // Как в легаси: пустой или слишком длинный ввод (сбой сканера и т.п.) — в лог ошибок
+        // Как в легаси: пустой или слишком длинный ввод (мусорный запрос) — в лог ошибок
         // и «не найдено», без запроса в SOAP.
         if (string.IsNullOrEmpty(searchValue) || searchValue.Length > MaxSearchValueLength)
         {

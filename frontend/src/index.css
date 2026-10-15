@@ -134,6 +134,17 @@ body {
   }
 }
 
+/* Рамка найденной карты на экране сканирования, пока ИИН читается. */
+@keyframes cardPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
 @keyframes ringPulse {
   0% {
     box-shadow: 0 0 0 0 rgba(37, 178, 107, 0.35);

@@ -74,6 +74,24 @@ export async function createOcr(onStatus?: (status: string, progress: number) =>
   };
 }
 
+let shared: Promise<Ocr> | null = null;
+
+/**
+ * Один воркер на всю страницу киоска: старт занимает секунды, поэтому его запускают заранее (экран выбора)
+ * и не закрывают между посетителями — память освобождает плановая перезагрузка киоска. Не загрузился — следующий
+ * вызов пробует снова.
+ */
+export function sharedOcr(): Promise<Ocr> {
+  if (!shared) {
+    const p = createOcr();
+    shared = p;
+    p.catch(() => {
+      if (shared === p) shared = null;
+    });
+  }
+  return shared;
+}
+
 /** Умеет ли браузер WASM SIMD (от этого зависит, какое ядро выберет воркер). Тот же тест, что у tesseract.js. */
 export function wasmSimdSupported(): boolean {
   try {

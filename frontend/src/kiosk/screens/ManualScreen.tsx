@@ -11,10 +11,14 @@ const IDLE_MS = 60000;
 export function ManualScreen({
   accent,
   onBack,
+  onHome,
   onSearch,
 }: {
   accent: string;
+  /** Кнопка «Назад» — к выбору способа (или на главную, если сканировать нечем). */
   onBack: () => void;
+  /** Брошенный ввод — сразу на главную. */
+  onHome: () => void;
   onSearch: (value: string) => void;
 }) {
   const { t } = useI18n();
@@ -24,9 +28,9 @@ export function ManualScreen({
   const max = 12;
 
   useEffect(() => {
-    const id = setTimeout(onBack, IDLE_MS);
+    const id = setTimeout(onHome, IDLE_MS);
     return () => clearTimeout(id);
-  }, [touches, onBack]);
+  }, [touches, onHome]);
 
   const addChar = (c: string) => setValue((v) => (v.length >= max ? v : v + c));
   const back = () => setValue((v) => v.slice(0, -1));

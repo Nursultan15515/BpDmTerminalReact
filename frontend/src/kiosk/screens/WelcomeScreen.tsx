@@ -1,38 +1,10 @@
-import { useEffect, useRef } from 'react';
-import { MAX_SEARCH_LENGTH } from '../constants';
 import { PressBtn } from '../PressBtn';
 import { Arrow } from '../icons';
 import { LangSwitch } from '../LangSwitch';
 import { useI18n } from '../i18n';
 
-export function WelcomeScreen({
-  accent,
-  onStart,
-  onScan,
-}: {
-  accent: string;
-  onStart: () => void;
-  onScan: (value: string) => void;
-}) {
+export function WelcomeScreen({ accent, onStart }: { accent: string; onStart: () => void }) {
   const { t, lang, setLang } = useI18n();
-
-  // Сканер штрих-кода работает как HID-клавиатура: «печатает» код и завершает Enter.
-  // Копим символы в буфер и отправляем по Enter (поведение как в старом терминале).
-  const buffer = useRef('');
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Enter') {
-        const value = buffer.current.trim();
-        buffer.current = '';
-        if (value) onScan(value);
-      } else if (e.key.length === 1 && buffer.current.length <= MAX_SEARCH_LENGTH) {
-        // Копим на символ больше лимита: слишком длинный ввод бэкенд сам отбракует и запишет в лог.
-        buffer.current += e.key;
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onScan]);
 
   return (
     <div

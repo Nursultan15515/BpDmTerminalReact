@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { ACCENT, resolveCanvas, type ResultType, type Screen, type VisitorCard } from './constants';
 import { errorText, getCardStatus, reportCardStatus, reportError, searchVisitor } from './api';
+import { hasCamera } from '../idscan/setup';
 import { readDevStart } from './devStart';
 import { StatusBar } from './StatusBar';
 import { WelcomeScreen } from './screens/WelcomeScreen';
+import { ChooseScreen } from './screens/ChooseScreen';
+import { ScanScreen } from './screens/ScanScreen';
 import { ManualScreen } from './screens/ManualScreen';
 import { ResultScreen } from './screens/ResultScreen';
 import { ConfirmScreen } from './screens/ConfirmScreen';
@@ -15,7 +18,7 @@ import { LoadingScreen } from './screens/LoadingScreen';
 import { NoCardsScreen } from './screens/NoCardsScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 
-// Откуда пришёл поиск — для кнопки «Повторить» на экранах результата/ошибки.
+// Откуда пришёл поиск (сканирование удостоверения или ручной ввод) — для «Повторить» на экранах результата/ошибки.
 type Source = 'scan' | 'manual';
 
 export function KioskApp() {
@@ -28,7 +31,9 @@ export function KioskApp() {
   const [query, setQuery] = useState(devStart?.query ?? '');
   const [resultType, setResultType] = useState<ResultType>(devStart?.resultType ?? 'loading');
   const [card, setCard] = useState<VisitorCard | null>(devStart?.card ?? null);
-  const [source, setSource] = useState<Source>('scan');
+  const [source, setSource] = useState<Source>('manual');
+  // Есть камера — после «Начать» посетитель выбирает: сканировать удостоверение или ввести вручную.
+  const [canScan, setCanScan] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(devStart?.settingsOpen ?? false);
 
   // Каждые 10 возвратов на главный экран перезагружаем страницу целиком — сбрасываем
@@ -46,16 +51,17 @@ export function KioskApp() {
     setScreen('welcome');
   };
 
-  // «Начать» (ручной поиск): как в старом терминале сначала проверяем, есть ли карты
-  // в диспенсере. Нет карт — сразу сообщаем, не пуская посетителя в бесполезный путь.
-  // Статус уходит и на бэкенд: он сам решает, сообщать ли в SOAP, что карты заканчиваются.
+  // «Начать»: как в старом терминале сначала проверяем, есть ли карты в диспенсере. Нет карт — сразу
+  // сообщаем, не пуская посетителя в бесполезный путь. Статус уходит и на бэкенд: он сам решает,
+  // сообщать ли в SOAP, что карты заканчиваются. Камеры нет — выбирать нечего, сразу ручной ввод.
   const handleStart = () => {
     setResultType('loading');
     setScreen('result');
-    getCardStatus()
-      .then((s) => {
+    Promise.all([getCardStatus(), hasCamera()])
+      .then(([s, camera]) => {
         reportCardStatus(s.status);
-        setScreen(s.status === 0 ? 'nocards' : 'manual');
+        setCanScan(camera);
+        setScreen(s.status === 0 ? 'nocards' : camera ? 'choose' : 'manual');
       })
       .catch((e) => {
         reportError(`card-status: ${errorText(e)}`, 'Start');
@@ -98,24 +104,36 @@ export function KioskApp() {
     return () => window.removeEventListener('resize', fit);
   }, []);
 
-  const retryScreen = () => setScreen(source === 'manual' ? 'manual' : 'welcome');
+  const retryScreen = () => setScreen(source);
 
   return (
     <div id="stage">
       <div id="canvas" ref={canvasRef}>
         <StatusBar show onHold={() => setSettingsOpen(true)} />
 
-        {screen === 'welcome' && (
-          <WelcomeScreen
+        {screen === 'welcome' && <WelcomeScreen accent={ACCENT} onStart={handleStart} />}
+        {screen === 'choose' && (
+          <ChooseScreen
             accent={ACCENT}
-            onStart={handleStart}
-            onScan={(v) => runSearch(v, 'scan')}
+            onScan={() => setScreen('scan')}
+            onManual={() => setScreen('manual')}
+            onBack={() => setScreen('welcome')}
+          />
+        )}
+        {screen === 'scan' && (
+          <ScanScreen
+            accent={ACCENT}
+            onFound={(iin) => runSearch(iin, 'scan')}
+            onManual={() => setScreen('manual')}
+            onBack={() => setScreen('choose')}
+            onHome={() => setScreen('welcome')}
           />
         )}
         {screen === 'manual' && (
           <ManualScreen
             accent={ACCENT}
-            onBack={() => setScreen('welcome')}
+            onBack={() => setScreen(canScan ? 'choose' : 'welcome')}
+            onHome={() => setScreen('welcome')}
             onSearch={(v) => runSearch(v, 'manual')}
           />
         )}

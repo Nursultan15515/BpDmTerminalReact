@@ -31,6 +31,8 @@ export interface ScanOptions {
   binarization: Binarization;
   /** Читать ещё и дату рождения на лицевой стороне — для сверки с датой внутри ИИН. */
   readDob: boolean;
+  /** false — шаги без картинок (киоску их не показывать, а PNG каждого шага — лишняя работа процессору). */
+  images?: boolean;
 }
 
 export interface ScanStep {
@@ -38,7 +40,7 @@ export interface ScanStep {
   text: string;
   confidence: number;
   ms: number;
-  /** То, что ушло в распознавание (PNG, data URL). */
+  /** То, что ушло в распознавание (PNG, data URL); пусто, если картинки не просили (images: false). */
   image: string;
 }
 
@@ -318,7 +320,7 @@ export async function scanFrame(ocr: Ocr, source: CanvasImageSource, frameWidth:
     text: result.text,
     confidence: result.confidence,
     ms: result.ms,
-    image: canvas.toDataURL(),
+    image: options.images === false ? '' : canvas.toDataURL(),
   }));
   return {
     ...verdict,

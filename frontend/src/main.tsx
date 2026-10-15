@@ -18,8 +18,8 @@ if (import.meta.env.PROD && !params.has('idscan')) document.documentElement.clas
 
 const root = createRoot(document.getElementById('root')!)
 
-// ?idscan — тестовая страница распознавания удостоверения. Есть и в боевой сборке (её открывают на терминале),
-// грузится отдельным куском, чтобы распознавание (tesseract.js) не утяжеляло киоск.
+// ?idscan — тестовая страница распознавания удостоверения. Есть и в боевой сборке (на терминале на ней выбирают
+// камеру документа и рамку для экрана сканирования), грузится отдельным куском — киоску сама страница не нужна.
 if (params.has('idscan')) {
   import('./idscan/IdScanPage').then(({ IdScanPage }) => root.render(<IdScanPage />))
 } else if (import.meta.env.DEV && params.has('gallery')) {

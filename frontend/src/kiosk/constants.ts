@@ -63,13 +63,19 @@ export function applyRatioSetting(setting: RatioSetting): void {
   window.location.href = window.location.pathname;
 }
 
-export type Screen = 'welcome' | 'manual' | 'result' | 'confirm' | 'photo' | 'giveCard' | 'success' | 'nocards';
+export type Screen =
+  | 'welcome'
+  | 'choose'
+  | 'scan'
+  | 'manual'
+  | 'result'
+  | 'confirm'
+  | 'photo'
+  | 'giveCard'
+  | 'success'
+  | 'nocards';
 
 export type ResultType = 'loading' | 'found' | 'notfound' | 'error';
-
-// ИИН — 12 цифр, номер документа короче; длиннее бывает только мусорный ввод
-// (то же ограничение MaxSearchValueLength на бэкенде).
-export const MAX_SEARCH_LENGTH = 30;
 
 export const GREEN = '#1FA968';
 

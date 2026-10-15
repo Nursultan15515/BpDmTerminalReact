@@ -3,13 +3,14 @@ import { CONFIRM_STREAK, nextStreak, type Streak } from './iin';
 import { defaultCardRect, FULL_FRAME, ZONES, zoneOnFrame, type Rect, type Rotation } from './layout';
 import { createOcr, wasmSimdSupported, type Ocr } from './ocr';
 import { scanFrame, type Binarization, type ScanMode, type ScanOptions, type ScanResult } from './scan';
+import { cameraConstraints, loadSaved, LOOP_PAUSE_MS, RESOLUTIONS, save } from './setup';
 import { makeTestCard, type CardSide, type TestCard } from './testCard';
 import { sameDob } from './verdict';
 
 // Тестовая страница распознавания удостоверения (?idscan): читает ИИН с лицевой стороны (с датой рождения
 // для сверки) или из MRZ на обороте — с камеры, из файла или с синтетической тестовой карты — и показывает,
 // что вырезано, что прочитано и сколько это заняло. Есть и в боевой сборке: на терминале здесь выбирают камеру документа и рисуют рамку
-// карты (запоминается в этом браузере). Кадры никуда не отправляются и не сохраняются.
+// карты (запоминается в этом браузере, см. setup.ts) — с ними же сканирует экран киоска. Кадры никуда не отправляются и не сохраняются.
 
 type Source = 'camera' | 'file' | 'test';
 
@@ -27,23 +28,6 @@ interface HistoryRow {
   ms: number;
 }
 
-interface Saved {
-  deviceId?: string;
-  resolution?: string;
-  /** Рамка карты — своя для каждой камеры (ключ — deviceId): у камеры документа и камеры лица они разные. */
-  cameraCards?: Record<string, Rect>;
-  rotation?: Rotation;
-  mode?: ScanMode;
-  binarization?: Binarization;
-  readDob?: boolean;
-  autoCard?: boolean;
-  autoLayout?: boolean;
-}
-
-const STORAGE_KEY = 'idscan';
-const RESOLUTIONS = ['1920x1080', '1280x720', '640x480'];
-// Пауза между кадрами в живом режиме — чтобы не держать процессор терминала на 100 %.
-const LOOP_PAUSE_MS = 150;
 const CAMERA_SUPPORTED = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
 
 const STATUS_RU: Record<string, string> = {
@@ -52,22 +36,6 @@ const STATUS_RU: Record<string, string> = {
   'loading language traineddata': 'модель',
   'initializing api': 'настройка',
 };
-
-function loadSaved(): Saved {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') as Saved;
-  } catch {
-    return {};
-  }
-}
-
-function save(patch: Saved) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...loadSaved(), ...patch }));
-  } catch {
-    /* без localStorage настройки просто не запоминаются */
-  }
-}
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const errorText = (e: unknown) => (e instanceof Error ? `${e.name}: ${e.message}` : String(e));
@@ -289,12 +257,8 @@ export function IdScanPage() {
     const video = videoRef.current;
     let alive = true;
     let stream: MediaStream | null = null;
-    const [width, height] = resolution.split('x').map(Number);
     navigator.mediaDevices
-      .getUserMedia({
-        audio: false,
-        video: { ...(deviceId ? { deviceId: { exact: deviceId } } : {}), width: { ideal: width }, height: { ideal: height } },
-      })
+      .getUserMedia(cameraConstraints(deviceId, resolution))
       .then(async (s) => {
         if (!alive) {
           s.getTracks().forEach((t) => t.stop());

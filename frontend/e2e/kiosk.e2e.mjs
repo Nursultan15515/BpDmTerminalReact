@@ -162,10 +162,46 @@ const tapKeys = (digits) =>
     k.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
     k.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
   } return true; })()`);
-// Сканер штрих-кода — HID-клавиатура: символы и Enter.
-const scan = (value) =>
-  cdp.eval(`(() => { for (const ch of ${JSON.stringify(value)}) window.dispatchEvent(new KeyboardEvent('keydown', { key: ch }));
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' })); return true; })()`);
+// Камера документа с тестовой картой: синтетическое удостоверение (src/idscan/testCard.ts — его отдаёт dev-сервер Vite)
+// на тёмном «столе» вместо фейковой камеры Chrome. Каждый getUserMedia получает свою копию потока — видно, выключил
+// ли экран камеру. Возвращает ИИН на карте.
+const fakeCardCamera = (side) =>
+  cdp.eval(`(async () => {
+    const { makeTestCard } = await import('/src/idscan/testCard.ts');
+    const tc = makeTestCard(1, false, ${JSON.stringify(side)});
+    const img = new Image();
+    img.src = tc.url;
+    await img.decode();
+    const c = document.createElement('canvas');
+    c.width = 1280;
+    c.height = 720;
+    const g = c.getContext('2d');
+    const draw = () => {
+      g.fillStyle = '#2b3138';
+      g.fillRect(0, 0, c.width, c.height);
+      g.drawImage(img, (c.width - tc.width) / 2, (c.height - tc.height) / 2);
+    };
+    draw();
+    setInterval(draw, 100);
+    const stream = c.captureStream(10);
+    window.__cameras = [];
+    navigator.mediaDevices.getUserMedia = async () => {
+      const s = stream.clone();
+      window.__cameras.push(s);
+      return s;
+    };
+    return tc.iin.iin;
+  })()`);
+const camerasOff = () => cdp.eval(`(window.__cameras ?? []).every((s) => s.getTracks().every((t) => t.readyState === 'ended'))`);
+const scanPhase = () => cdp.eval(`document.querySelector('[data-scan-phase]')?.getAttribute('data-scan-phase') ?? ''`);
+async function waitPhase(phase, timeout = 15000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < timeout) {
+    if ((await scanPhase()) === phase) return;
+    await sleep(100);
+  }
+  throw new Error(`экран сканирования не дошёл до «${phase}»: сейчас «${await scanPhase()}»`);
+}
 const KIOSK = `http://127.0.0.1:${P.vite}/?ratio=16:9`;
 async function open(url = KIOSK, marker = 'Правила получения пропуска') {
   await cdp.send('Page.navigate', { url });
@@ -185,18 +221,26 @@ async function scenario(name, fn) {
     results.push(['FAIL', name, e.message]);
   }
 }
-async function scanAndConfirm() {
-  await scan('123456789012');
+// «Начать» → «Ввести вручную» → номер → «Найти» → «Да, всё верно». beforeConfirm — перед подтверждением
+// (например, «кончились карты» уже после проверки на «Начать»).
+async function searchAndConfirm(beforeConfirm) {
+  await click('Начать');
+  await waitText('Как найти пропуск?');
+  await click('Ввести вручную');
+  await waitText('Введите ИИН или номер документа');
+  await tapKeys('123456789012');
+  await click('Найти');
   await waitText('Проверьте данные');
+  beforeConfirm?.();
   await click('Да, всё верно');
 }
 
 // ─── Сценарии ────────────────────────────────────────────────────────────────
 async function run() {
-  await scenario('«Начать», status 1 → поиск, статус ушёл на бэкенд, запрос без preflight', async () => {
+  await scenario('«Начать», status 1 → выбор способа, статус ушёл на бэкенд, запрос без preflight', async () => {
     hw.set({ cardStatus: 1 });
     await click('Начать');
-    await waitText('Введите ИИН или номер документа');
+    await waitText('Как найти пропуск?');
     const st = calls('hw', '/card-status/');
     assert(st.length === 1, `card-status вызван ${st.length} раз`);
     assert(st[0].ctype === null && calls('hw', '/card-status/', 'OPTIONS').length === 0, 'card-status должен быть простым CORS-запросом');
@@ -213,7 +257,7 @@ async function run() {
 
   await scenario('RFID не привязался → confirm(allow=false), ошибка без «Попробовать снова»', async () => {
     API.rfidStatus = false;
-    await scanAndConfirm();
+    await searchAndConfirm();
     const tx = await waitText('Не удалось выдать карту');
     const conf = calls('hw', '/confirm/');
     assert(conf.length === 1 && conf[0].body.allow === false, `confirm: ${JSON.stringify(conf.map((c) => c.body))}`);
@@ -225,7 +269,7 @@ async function run() {
   });
 
   await scenario('RFID ок → confirm(allow=true), отсчёт 15 с, красный ≤5 с, сам уходит на главную', async () => {
-    await scanAndConfirm();
+    await searchAndConfirm();
     const tx = await waitText('Регистрация завершена');
     const conf = calls('hw', '/confirm/');
     assert(conf.length === 1 && conf[0].body.allow === true, `confirm: ${JSON.stringify(conf.map((c) => c.body))}`);
@@ -241,9 +285,8 @@ async function run() {
     assert(one === 'секунды', `склонение: «1 ${one}»`);
   });
 
-  await scenario('issue-card: карт нет → «Карты закончились», статус 0 на бэкенд, без confirm', async () => {
-    hw.set({ cardStatus: 0 });
-    await scanAndConfirm();
+  await scenario('issue-card: карты кончились уже после «Начать» → «Карты закончились», статус 0 на бэкенд, без confirm', async () => {
+    await searchAndConfirm(() => hw.set({ cardStatus: 0 }));
     await waitText('Карты закончились');
     await waitLog(() => calls('api', '/api/terminal/card-status').some((c) => c.body.status === 0), 'card-status {status:0}');
     assert(calls('hw', '/confirm/').length === 0, 'confirm не должен вызываться');
@@ -252,17 +295,18 @@ async function run() {
 
   await scenario('issue-card: не прочитался UID → ошибка без ложного CardsEnded, ошибка в лог', async () => {
     hw.set({ issue: 'uid-error' });
-    await scanAndConfirm();
+    await searchAndConfirm();
     await waitText('Не удалось выдать карту');
     await waitLog(() => calls('api', '/api/terminal/errors').length === 1, 'POST /api/terminal/errors');
     const err = calls('api', '/api/terminal/errors')[0].body;
     assert(err.description === 'issue-card: UID read error' && err.notice === 'GiveCard; cardId=CARD-1', `errors: ${JSON.stringify(err)}`);
-    assert(calls('api', '/api/terminal/card-status').length === 0, 'ложный отчёт статуса');
+    // Статус с «Начать» (карты есть) уходит всегда; ложный — это «карт нет» после сбоя чтения UID.
+    assert(!calls('api', '/api/terminal/card-status').some((c) => c.body.status === 0), 'ложный отчёт «карт нет»');
   });
 
   await scenario('issue-card: HTTP 500 → экран ошибки, ошибка в лог', async () => {
     hw.set({ issue: 'http500' });
-    await scanAndConfirm();
+    await searchAndConfirm();
     await waitText('Не удалось выдать карту');
     await waitLog(() => calls('api', '/api/terminal/errors').length === 1, 'POST /api/terminal/errors');
     const err = calls('api', '/api/terminal/errors')[0].body;
@@ -278,16 +322,68 @@ async function run() {
     assert(err.description.startsWith('card-status: ') && err.notice === 'Start', `errors: ${JSON.stringify(err)}`);
   });
 
-  await scenario('сканер прислал 40 символов → на бэкенд ушёл 31, «Пропуск не найден»', async () => {
-    await scan('A'.repeat(40));
-    await waitText('Пропуск не найден');
-    const s = calls('api', '/api/visitors/search');
-    assert(s.length === 1 && s[0].body.searchValue.length === 31, `search: ${JSON.stringify(s.map((c) => c.body.searchValue.length))}`);
+  await scenario('сканирование: тестовая карта (оборот) → рамка, «прочитан» → поиск по ИИН → подтверждение, камера выключена', async () => {
+    const iin = await fakeCardCamera('back');
+    await click('Начать');
+    await waitText('Как найти пропуск?');
+    await click('Сканировать удостоверение');
+    // Шаги, которые видел посетитель, — пока поиск не ушёл на бэкенд.
+    const seen = new Set();
+    const t0 = Date.now();
+    while (calls('api', '/api/visitors/search').length === 0) {
+      if (Date.now() - t0 > 60000) throw new Error(`ИИН не прочитан за 60 с; шаги: ${[...seen].join(' → ')}`);
+      seen.add(await scanPhase());
+      await sleep(100);
+    }
+    const search = calls('api', '/api/visitors/search');
+    assert(search.length === 1 && search[0].body.searchValue === iin, `поиск: ${JSON.stringify(search.map((c) => c.body))}, на карте ${iin}`);
+    assert(seen.has('done'), `не было «ИИН прочитан»: ${[...seen].join(' → ')}`);
+    await waitText('Проверьте данные');
+    assert(await camerasOff(), 'камера документа не выключена после сканирования');
+    return `шаги: ${[...seen].filter(Boolean).join(' → ')}`;
+  });
+
+  await scenario('сканирование: карты на кадре нет → подсказка через 10 с, «не удалось» через 30 с, камера выключена, «Ввести вручную»', async () => {
+    await click('Начать');
+    await waitText('Как найти пропуск?');
+    await click('Сканировать удостоверение');
+    await waitPhase('place');
+    await waitText('Не получается?', 12000);
+    await waitPhase('failed', 25000);
+    const tx = await waitText('Не удалось прочитать удостоверение');
+    assert(tx.includes('Попробовать снова'), 'нет «Попробовать снова»');
+    assert(await cdp.eval(`document.querySelector('video').srcObject === null`), 'камера не выключена');
+    await click('Ввести вручную');
+    await waitText('Введите ИИН или номер документа');
+    assert(calls('api', '/api/visitors/search').length === 0, 'поиск без ИИН');
+  });
+
+  await scenario('сканирование: камера не открылась → «Сканирование недоступно», ошибка в лог; «Назад» → выбор → главная', async () => {
+    await cdp.eval(`navigator.mediaDevices.getUserMedia = async () => { throw new DOMException('Permission denied', 'NotAllowedError'); }; true`);
+    await click('Начать');
+    await waitText('Как найти пропуск?');
+    await click('Сканировать удостоверение');
+    await waitText('Сканирование недоступно');
+    await waitLog(() => calls('api', '/api/terminal/errors').length === 1, 'POST /api/terminal/errors');
+    const err = calls('api', '/api/terminal/errors')[0].body;
+    assert(err.description === 'idscan: NotAllowedError: Permission denied' && err.notice === 'ScanDoc', `errors: ${JSON.stringify(err)}`);
+    await click('Назад');
+    await waitText('Как найти пропуск?');
+    await click('Назад');
+    await waitText('Правила получения пропуска');
+  });
+
+  await scenario('камеры нет → после «Начать» сразу ручной ввод, «Назад» → главная', async () => {
+    await cdp.eval(`navigator.mediaDevices.enumerateDevices = async () => []; true`);
+    await click('Начать');
+    await waitText('Введите ИИН или номер документа');
+    await click('Назад');
+    await waitText('Правила получения пропуска');
   });
 
   await scenario('фото: снимок в родном разрешении камеры, на экране — зеркало, затем выдача', async () => {
     API.needPhoto = true;
-    await scanAndConfirm();
+    await searchAndConfirm();
     await waitText('Пропуск найден');
     const t0 = Date.now();
     while (!(await cdp.eval(`(document.querySelector('video')?.videoWidth ?? 0) > 0`))) {
@@ -313,6 +409,8 @@ async function run() {
     assert(/\d+ секунд ішінде/.test(await text()), 'нет отсчёта на казахском');
     await open(`http://127.0.0.1:${P.vite}/?screen=confirm&lang=EN`, 'Check the details');
     assert((await text()).includes('Сарсенбаева'), 'нет тестовой карточки');
+    await open(`http://127.0.0.1:${P.vite}/?screen=choose&lang=KK`, 'Рұқсатнаманы қалай іздейміз?');
+    await open(`http://127.0.0.1:${P.vite}/?screen=scan&lang=EN`, 'ID card scan');
     await open(`http://127.0.0.1:${P.vite}/?gallery`, 'галерея экранов');
     results.push(['PASS', 'галерея: ?screen=&lang= и ?gallery', '']);
   } catch (e) {
@@ -331,6 +429,8 @@ async function run() {
       hw.reset();
       await open();
       await click('Начать');
+      await waitText('Как найти пропуск?');
+      await click('Ввести вручную');
       await waitText('Введите ИИН или номер документа');
       await tapKeys('9901');
       const advance = async (ms) => {

@@ -67,8 +67,9 @@ export function Gallery() {
 
       <h2 style={{ fontSize: 18, fontWeight: 800, marginTop: 28 }}>Заглушка SOAP: исход по последней цифре номера документа</h2>
       <p style={{ color: '#5a6675', marginTop: 4 }}>
-        Номер вводится на экране «Ручной ввод» или набирается на клавиатуре ПК на главном экране + Enter (как сканер).
-        Отправленные в «SOAP» фото — в backend/TerminalApi/stub-photos, журналы — в LocalDB DbTerminalBpDm.
+        Номер вводится на экране «Ручной ввод»; ИИН со «Сканирования удостоверения» — у тестовой карты с{' '}
+        <a href="/?idscan">/?idscan</a> (показать камере на экране телефона или распечатать). Отправленные в «SOAP» фото —
+        в backend/TerminalApi/stub-photos, журналы — в LocalDB DbTerminalBpDm.
       </p>
       <table style={{ ...card, borderCollapse: 'separate', width: 'auto' }}>
         <tbody>

@@ -131,6 +131,36 @@ export function RetakeIcon({ size = 28, color = '#5A6675' }: { size?: number; co
   );
 }
 
+/** Удостоверение личности: фото, строки данных и ИИН внизу. */
+export function IdCardGlyph({ size = 160, color = '#fff' }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={(size * 3) / 4} viewBox="0 0 160 120" fill="none">
+      <rect x="12" y="18" width="136" height="86" rx="11" stroke={color} strokeWidth="4" />
+      <rect x="25" y="32" width="34" height="42" rx="5" fill={color} opacity="0.22" />
+      <circle cx="42" cy="47" r="7" fill={color} />
+      <path d="M30 70 q0 -12 12 -12 q12 0 12 12 Z" fill={color} />
+      <rect x="70" y="35" width="62" height="7" rx="3.5" fill={color} opacity="0.55" />
+      <rect x="70" y="50" width="46" height="7" rx="3.5" fill={color} opacity="0.55" />
+      <rect x="70" y="65" width="54" height="7" rx="3.5" fill={color} opacity="0.55" />
+      <rect x="25" y="85" width="76" height="8" rx="4" fill={color} />
+    </svg>
+  );
+}
+
+/** Экранная клавиатура. */
+export function KeyboardGlyph({ size = 160, color = '#fff' }: { size?: number; color?: string }) {
+  const keys = [0, 1, 2, 3, 4, 5].flatMap((col) => [0, 1].map((row) => ({ x: 28 + col * 18.5, y: 40 + row * 18 })));
+  return (
+    <svg width={size} height={(size * 3) / 4} viewBox="0 0 160 120" fill="none">
+      <rect x="12" y="24" width="136" height="80" rx="11" stroke={color} strokeWidth="4" />
+      {keys.map((k) => (
+        <rect key={`${k.x}-${k.y}`} x={k.x} y={k.y} width="11" height="10" rx="2.5" fill={color} opacity="0.55" />
+      ))}
+      <rect x="46" y="78" width="68" height="10" rx="3" fill={color} />
+    </svg>
+  );
+}
+
 export function PersonGlyph({ size = 120, color = '#C4D2E2' }: { size?: number; color?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 120 120" fill="none">
