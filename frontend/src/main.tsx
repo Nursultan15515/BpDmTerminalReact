@@ -13,11 +13,12 @@ import App from './App.tsx'
 const params = new URLSearchParams(window.location.search)
 
 // Сенсорный киоск: в боевой сборке курсор мыши скрыт, как в легаси (_Layout.cshtml). В dev — виден.
-// На служебных страницах курсор нужен: на распознавании удостоверения рамку карты рисуют и мышью.
-// Виден и когда сайт открыт на самом сервере (localhost, через RDP — там работают мышью): терминалы
-// открывают сайт по адресу сервера, не по localhost, и у них курсор остаётся скрытым.
+// На служебных страницах курсор нужен: на распознавании удостоверения рамку карты рисуют и мышью,
+// камеры наладчик выбирает и мышью. Виден и когда сайт открыт на самом сервере (localhost, через RDP —
+// там работают мышью): терминалы открывают сайт по адресу сервера, не по localhost, и у них курсор скрыт.
+const servicePage = params.has('idscan') || params.has('cameras')
 const onServer = ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname)
-if (import.meta.env.PROD && !params.has('idscan') && !onServer) document.documentElement.classList.add('hide-cursor')
+if (import.meta.env.PROD && !servicePage && !onServer) document.documentElement.classList.add('hide-cursor')
 
 const root = createRoot(document.getElementById('root')!)
 
@@ -25,6 +26,10 @@ const root = createRoot(document.getElementById('root')!)
 // камеру документа и рамку для экрана сканирования), грузится отдельным куском — киоску сама страница не нужна.
 if (params.has('idscan')) {
   import('./idscan/IdScanPage').then(({ IdScanPage }) => root.render(<IdScanPage />))
+} else if (params.has('cameras')) {
+  // ?cameras — какая камера снимает лицо, а какая документ (запоминается в этом браузере). Есть и в боевой
+  // сборке: вход — экран настройки → «Камеры». Отдельный кусок, как ?idscan.
+  import('./cameras/CamerasPage').then(({ CamerasPage }) => root.render(<CamerasPage />))
 } else if (import.meta.env.DEV && params.has('gallery')) {
   // Стенд (только dev): ?gallery — все экраны на всех языках и сценарии заглушек.
   import('./dev/Gallery').then(({ Gallery }) => root.render(<Gallery />))

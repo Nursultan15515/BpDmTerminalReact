@@ -187,7 +187,8 @@ const fakeCardCamera = (side) =>
     setInterval(draw, 100);
     const stream = c.captureStream(10);
     window.__cameras = [];
-    navigator.mediaDevices.getUserMedia = async () => {
+    navigator.mediaDevices.getUserMedia = async (constraints) => {
+      window.__constraints = constraints; // какую камеру просил экран
       const s = stream.clone();
       window.__cameras.push(s);
       return s;
@@ -405,6 +406,75 @@ async function run() {
     return `снимок ${photo.size.w}x${photo.size.h}`;
   });
 
+  // Две камеры: без выбора экран фото берёт первую (бывает, что камеру документа). Выбор — на странице «Камеры».
+  await scenario('камеры: выбор на ?cameras → фото и сканирование берут свои; сменился id — по названию; пропала — по умолчанию и ошибка в лог', async () => {
+    const until = async (expr, what, timeout = 10000) => {
+      const t0 = Date.now();
+      while (!(await cdp.eval(`!!(${expr})`))) {
+        if (Date.now() - t0 > timeout) throw new Error(`не дождались: ${what}`);
+        await sleep(100);
+      }
+    };
+    const photoCamera = async () => {
+      API.needPhoto = true;
+      await open();
+      await searchAndConfirm();
+      await waitText('Пропуск найден');
+      const label = `document.querySelector('video')?.srcObject?.getVideoTracks()[0]?.label`;
+      await until(label, 'камера экрана фото');
+      return cdp.eval(label);
+    };
+    const pick = async (camera, button) => {
+      await cdp.eval(`document.querySelector('[data-camera="${camera}"]').click()`);
+      await until(`document.querySelector('[data-camera-preview="live"]')?.innerText.startsWith('${camera}')`, `превью ${camera}`);
+      await click(button);
+    };
+    const storage = (key) => cdp.eval(`JSON.parse(localStorage.getItem('${key}') ?? 'null')`);
+    const setPhotoChoice = (choice) => cdp.eval(`localStorage.setItem('camera.photo', ${JSON.stringify(JSON.stringify(choice))})`);
+    try {
+      assert((await photoCamera()) === 'fake_device_0', 'без выбора — не первая камера');
+
+      await open(`http://127.0.0.1:${P.vite}/?cameras`, 'Назначено');
+      await until(`document.querySelector('[data-cameras="2"]')`, 'две камеры в списке');
+      await pick('fake_device_1', 'Для фото лица');
+      await pick('fake_device_0', 'Для документа');
+      const photo = await storage('camera.photo');
+      const scan = await storage('idscan');
+      assert(photo?.label === 'fake_device_1' && scan?.deviceLabel === 'fake_device_0' && scan?.deviceId, `сохранено: ${JSON.stringify({ photo, scan })}`);
+      await until(`/fake_device_0 — подключена/.test(document.querySelector('[data-camera-role="document"]').innerText)`, '«Документ: fake_device_0 — подключена»');
+
+      assert((await photoCamera()) === 'fake_device_1', 'фото снимает не выбранная камера');
+
+      await open();
+      await fakeCardCamera('back');
+      await click('Начать');
+      await waitText('Как найти пропуск?');
+      await click('Сканировать удостоверение');
+      await until(`window.__constraints`, 'камера сканирования');
+      // Id камер у этого Chromium новые на каждой загрузке страницы (разрешение даёт флаг, оно не сохраняется) —
+      // сравниваем с id камеры документа на этой загрузке: значит, она нашлась по названию.
+      const asked = await cdp.eval(`window.__constraints.video.deviceId?.exact ?? ''`);
+      const docId = await cdp.eval(`navigator.mediaDevices.enumerateDevices().then((l) => l.find((d) => d.label === 'fake_device_0')?.deviceId)`);
+      assert(asked && asked === docId, `сканирование просило ${asked}, а fake_device_0 сейчас ${docId}`);
+
+      // Камеру переткнули в другой порт: id сменился, название то же — находится по названию, новый id запоминается.
+      await setPhotoChoice({ deviceId: 'stale-id', label: 'fake_device_1' });
+      assert((await photoCamera()) === 'fake_device_1', 'по названию не нашлась');
+      const updated = await storage('camera.photo');
+      assert(updated?.deviceId && updated.deviceId !== 'stale-id' && updated.label === 'fake_device_1', `новый id не запомнился: ${JSON.stringify(updated)}`);
+
+      // Выбранной камеры нет — снимает камера по умолчанию, в журнал ошибок уходит запись.
+      await setPhotoChoice({ deviceId: 'gone', label: 'Old USB camera' });
+      assert((await photoCamera()) === 'fake_device_0', 'без выбранной камеры — не камера по умолчанию');
+      await waitLog(() => calls('api', '/api/terminal/errors').some((c) => c.body.description === 'photo camera not connected: Old USB camera'), 'ошибка «камера не подключена»');
+      return 'без выбора fake_device_0 → выбрана fake_device_1; документ fake_device_0';
+    } finally {
+      await cdp.eval(`(() => { localStorage.removeItem('camera.photo');
+        const s = JSON.parse(localStorage.getItem('idscan') ?? '{}'); delete s.deviceId; delete s.deviceLabel;
+        localStorage.setItem('idscan', JSON.stringify(s)); })()`);
+    }
+  });
+
   // Галерея экранов (dev).
   try {
     await open(`http://127.0.0.1:${P.vite}/?screen=success&lang=KK`, 'Тіркеу аяқталды');
@@ -554,7 +624,8 @@ try {
 
   browser = spawn(findBrowser(), [
     '--headless=new', `--remote-debugging-port=${P.cdp}`, `--user-data-dir=${path.join(TMP, 'profile')}`,
-    '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream',
+    // Две камеры, как на терминале (лицо и документ): fake_device_0 и fake_device_1, без выбора браузер берёт первую.
+    '--use-fake-device-for-media-stream=device-count=2', '--use-fake-ui-for-media-stream',
     // Без прокси: имя «терминала» подменяется только в самом браузере, прокси о нём не знает. Внешних запросов нет и так.
     // Именно direct:// — --no-proxy-server Chromium 103 не отключает системный прокси.
     `--host-resolver-rules=MAP ${TERMINAL_HOST} 127.0.0.1`, '--proxy-server=direct://',

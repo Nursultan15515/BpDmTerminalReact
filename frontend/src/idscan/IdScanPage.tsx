@@ -6,6 +6,7 @@ import { scanFrame, type Binarization, type ScanMode, type ScanOptions, type Sca
 import { cameraConstraints, loadSaved, LOOP_PAUSE_MS, RESOLUTIONS, save } from './setup';
 import { makeTestCard, type CardSide, type TestCard } from './testCard';
 import { sameDob } from './verdict';
+import { choiceFor, resolveDocumentCamera, saveDocumentCamera } from '../kiosk/cameras';
 
 // Тестовая страница распознавания удостоверения (?idscan): читает ИИН с лицевой стороны (с датой рождения
 // для сверки) или из MRZ на обороте — с камеры, из файла или с синтетической тестовой карты — и показывает,
@@ -186,7 +187,9 @@ export function IdScanPage() {
 
   const [source, setSource] = useState<Source>('camera');
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
-  const [deviceId, setDeviceId] = useState(saved.deviceId ?? '');
+  // null — ещё ищем запомненную камеру документа: id у неё мог смениться, тогда она находится по названию
+  // (kiosk/cameras.ts) — и рамка переезжает на новый id.
+  const [deviceId, setDeviceId] = useState<string | null>(null);
   const [resolution, setResolution] = useState(saved.resolution ?? RESOLUTIONS[0]);
   const [videoSize, setVideoSize] = useState<{ width: number; height: number } | null>(null);
   const [cameraError, setCameraError] = useState('');
@@ -251,9 +254,21 @@ export function IdScanPage() {
     };
   }, []);
 
+  useEffect(() => {
+    let alive = true;
+    resolveDocumentCamera().then((id) => {
+      if (!alive) return;
+      setCameraCards(loadSaved().cameraCards ?? {});
+      setDeviceId(id);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   // Камера: включена, только пока выбран источник «Камера».
   useEffect(() => {
-    if (source !== 'camera' || !CAMERA_SUPPORTED) return;
+    if (source !== 'camera' || !CAMERA_SUPPORTED || deviceId === null) return;
     const video = videoRef.current;
     let alive = true;
     let stream: MediaStream | null = null;
@@ -425,9 +440,9 @@ export function IdScanPage() {
   // На терминале две камеры (лицо и документ) — переключаем по кругу; выбор запоминается в этом браузере.
   const switchCamera = () => {
     if (devices.length < 2) return;
-    const next = devices[(cameraIndex + 1) % devices.length].deviceId;
-    setDeviceId(next);
-    save({ deviceId: next });
+    const next = devices[(cameraIndex + 1) % devices.length];
+    setDeviceId(next.deviceId);
+    saveDocumentCamera(choiceFor(devices, next));
   };
 
   const shot = () => {
@@ -541,10 +556,11 @@ export function IdScanPage() {
                 </div>
                 <div style={row}>
                   <select
-                    value={deviceId}
+                    value={deviceId ?? ''}
                     onChange={(e) => {
+                      const camera = devices.find((d) => d.deviceId === e.target.value);
                       setDeviceId(e.target.value);
-                      save({ deviceId: e.target.value });
+                      saveDocumentCamera(camera ? choiceFor(devices, camera) : null);
                     }}
                     style={{ ...btn(), maxWidth: '100%' }}
                   >

@@ -5,6 +5,7 @@ import { sharedOcr } from '../../idscan/ocr';
 import { scanFrame } from '../../idscan/scan';
 import { cameraConstraints, loadSaved, LOOP_PAUSE_MS, RESOLUTIONS, savedScanOptions } from '../../idscan/setup';
 import { reportError } from '../api';
+import { resolveDocumentCamera } from '../cameras';
 import { GREEN } from '../constants';
 import { PressBtn } from '../PressBtn';
 import { Arrow, CheckIcon, ErrorGlyph, KeyboardGlyph, RetakeIcon } from '../icons';
@@ -47,7 +48,7 @@ function phaseOf(streak: Streak, cardFound: boolean | null): Phase {
   return cardFound ? 'reading' : 'place';
 }
 
-/** Камера из настроек ?idscan; её нет (переподключили, другой компьютер) — камера по умолчанию. */
+/** Камера документа (страница «Камеры» или ?idscan); её нет (отключили, другой компьютер) — камера по умолчанию. */
 async function openCamera(deviceId: string, resolution: string): Promise<MediaStream> {
   try {
     return await navigator.mediaDevices.getUserMedia(cameraConstraints(deviceId, resolution));
@@ -289,10 +290,12 @@ export function ScanScreen({
     );
 
     const run = async () => {
-      const saved = loadSaved();
       // Распознавание догружается, пока включается камера (обычно уже готово — его запускает экран выбора).
       const ocr = sharedOcr();
-      const s = await openCamera(saved.deviceId ?? '', saved.resolution ?? RESOLUTIONS[0]);
+      // Камера документа: найдётся и по названию, если у неё сменился id, — тогда обновятся id и рамка в настройках.
+      const camera = await resolveDocumentCamera();
+      const saved = loadSaved();
+      const s = await openCamera(camera, saved.resolution ?? RESOLUTIONS[0]);
       if (!alive) {
         s.getTracks().forEach((track) => track.stop());
         return;

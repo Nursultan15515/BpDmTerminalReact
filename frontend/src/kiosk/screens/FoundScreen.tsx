@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import Webcam from 'react-webcam';
 import { GREEN, type VisitorCard } from '../constants';
 import { reportError, savePhoto } from '../api';
+import { resolvePhotoCamera } from '../cameras';
 import { PressBtn } from '../PressBtn';
 import { CameraIcon, CheckIcon, PersonGlyph, RetakeIcon } from '../icons';
 import { useI18n } from '../i18n';
@@ -82,6 +83,7 @@ function CameraViewfinder({
   flash,
   errorMsg,
   shot,
+  cameraId,
   webcamRef,
   onCapture,
   onRetake,
@@ -91,6 +93,8 @@ function CameraViewfinder({
   flash: boolean;
   errorMsg: string;
   shot: string | null;
+  /** Камера для фото: id, null — по умолчанию, undefined — ещё выясняем (камеру пока не открываем). */
+  cameraId: string | null | undefined;
   webcamRef: React.RefObject<Webcam | null>;
   onCapture: () => void;
   onRetake: () => void;
@@ -134,13 +138,14 @@ function CameraViewfinder({
             alt=""
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }}
           />
-        ) : (
+        ) : cameraId === undefined ? null : (
           <Webcam
             ref={webcamRef}
             audio={false}
             screenshotFormat="image/jpeg"
             forceScreenshotSourceSize
-            videoConstraints={{ width: 480, height: 640, facingMode: 'user' }}
+            // Камера, выбранная на странице «Камеры»; без выбора браузер берёт первую — бывает, что камеру документа.
+            videoConstraints={{ width: 480, height: 640, ...(cameraId ? { deviceId: { exact: cameraId } } : { facingMode: 'user' }) }}
             onUserMediaError={(e) => reportError(`camera: ${String(e)}`, 'TakePhoto')}
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }}
           />
@@ -359,6 +364,21 @@ export function FoundScreen({
   const [errorMsg, setErrorMsg] = useState('');
   const [shot, setShot] = useState<string | null>(null);
   const [attempts, setAttempts] = useState(0);
+  const [cameraId, setCameraId] = useState<string | null | undefined>(undefined);
+
+  // Камера для фото — со страницы «Камеры». Выбранная не подключена — снимаем камерой по умолчанию
+  // и пишем в журнал ошибок, чтобы наладчик узнал.
+  useEffect(() => {
+    let alive = true;
+    resolvePhotoCamera().then(({ deviceId, missing }) => {
+      if (!alive) return;
+      if (missing) reportError(`photo camera not connected: ${missing.label || missing.deviceId}`, 'TakePhoto');
+      setCameraId(deviceId);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // Успешное фото = регистрация завершена: коротко показываем «Фото сделано» и идём дальше.
   // Пока фото не сделано — держим страховочный таймер на возврат к началу.
@@ -510,7 +530,17 @@ export function FoundScreen({
         </div>
 
         <div style={{ flex: 1, minWidth: 0, animation: 'popIn .55s .12s both' }}>
-          <CameraViewfinder accent={accent} phase={phase} flash={flash} errorMsg={errorMsg} shot={shot} webcamRef={webcamRef} onCapture={capture} onRetake={retake} />
+          <CameraViewfinder
+            accent={accent}
+            phase={phase}
+            flash={flash}
+            errorMsg={errorMsg}
+            shot={shot}
+            cameraId={cameraId}
+            webcamRef={webcamRef}
+            onCapture={capture}
+            onRetake={retake}
+          />
         </div>
       </div>
     </div>

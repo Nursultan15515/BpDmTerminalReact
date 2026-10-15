@@ -1,6 +1,6 @@
 import { useEffect, type CSSProperties } from 'react';
 import { PressBtn } from '../PressBtn';
-import { CameraIcon, HomeIcon } from '../icons';
+import { CameraIcon, HomeIcon, IdCardIcon } from '../icons';
 import { applyRatioSetting, getRatioSetting, type RatioSetting } from '../constants';
 
 const AUTO_RETURN_MS = 30000;
@@ -77,9 +77,13 @@ export function SettingsScreen({ accent, onClose }: { accent: string; onClose: (
       </div>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 28, marginTop: 72, justifyContent: 'center' }}>
+        {/* Какая камера снимает лицо, а какая — документ (запоминается в этом браузере). */}
+        <PressBtn onClick={() => window.location.assign(`${import.meta.env.BASE_URL}?cameras`)} style={SECONDARY}>
+          <CameraIcon color="#5A6675" /> Камеры
+        </PressBtn>
         {/* Тестовая страница распознавания удостоверения: выбрать камеру документа и рамку карты. */}
         <PressBtn onClick={() => window.location.assign(`${import.meta.env.BASE_URL}?idscan`)} style={SECONDARY}>
-          <CameraIcon color="#5A6675" /> Распознавание удостоверения
+          <IdCardIcon color="#5A6675" /> Распознавание удостоверения
         </PressBtn>
         <PressBtn onClick={onClose} style={SECONDARY}>
           <HomeIcon /> Закрыть

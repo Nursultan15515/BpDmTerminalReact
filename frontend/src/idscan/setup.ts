@@ -5,7 +5,11 @@ import type { Binarization, ScanMode, ScanOptions } from './scan';
 // документа и рамку на ?idscan, киоск читает их отсюда. Хранятся в localStorage этого браузера.
 
 export interface Saved {
+  /** Камера документа (её выбирают и на странице «Камеры», см. kiosk/cameras.ts). */
   deviceId?: string;
+  /** Название этой камеры и номер среди одноимённых: по ним она находится, если у неё сменился id. */
+  deviceLabel?: string;
+  deviceIndex?: number;
   resolution?: string;
   /** Рамка карты — своя для каждой камеры (ключ — deviceId): у камеры документа и камеры лица они разные. */
   cameraCards?: Record<string, Rect>;

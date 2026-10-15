@@ -122,6 +122,17 @@ export function CameraIcon({ size = 34, color = '#fff' }: { size?: number; color
   );
 }
 
+export function IdCardIcon({ size = 34, color = '#fff' }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <rect x="3" y="5.5" width="18" height="13" rx="2" stroke={color} strokeWidth="2" />
+      <circle cx="8.5" cy="10.5" r="1.8" stroke={color} strokeWidth="1.8" />
+      <path d="M5.9 15.6 Q8.5 12.6 11.1 15.6" stroke={color} strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M13.8 10 H18 M13.8 13.6 H16.8" stroke={color} strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function RetakeIcon({ size = 28, color = '#5A6675' }: { size?: number; color?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
