@@ -1,6 +1,6 @@
 import { useEffect, type CSSProperties } from 'react';
 import { PressBtn } from '../PressBtn';
-import { CameraIcon, HomeIcon } from '../icons';
+import { CameraIcon, HomeIcon, PulseIcon } from '../icons';
 import { applyRatioSetting, getRatioSetting, type RatioSetting } from '../constants';
 
 const AUTO_RETURN_MS = 30000;
@@ -80,6 +80,10 @@ export function SettingsScreen({ accent, onClose }: { accent: string; onClose: (
         {/* Тестовая страница распознавания удостоверения: выбрать камеру документа и рамку карты. */}
         <PressBtn onClick={() => window.location.assign(`${import.meta.env.BASE_URL}?idscan`)} style={SECONDARY}>
           <CameraIcon color="#5A6675" /> Распознавание удостоверения
+        </PressBtn>
+        {/* Диагностика: видит ли сервер приложения базу данных и SOAP-сервис. */}
+        <PressBtn onClick={() => window.location.assign(`${import.meta.env.BASE_URL}?diag`)} style={SECONDARY}>
+          <PulseIcon color="#5A6675" /> Диагностика
         </PressBtn>
         <PressBtn onClick={onClose} style={SECONDARY}>
           <HomeIcon /> Закрыть
