@@ -17,6 +17,8 @@ const FRONTEND = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const CONFIG = path.join(FRONTEND, 'vite.config.ts');
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'bpdm-e2e-'));
 const P = { hw: 18080, api: 15199, vite: 3100, preview: 3101, cdp: 9333 };
+// Имя сервера, по которому сайт открывает терминал (не localhost); браузер направляет его на этот ПК.
+const TERMINAL_HOST = 'terminal.test';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function findBrowser() {
@@ -473,20 +475,24 @@ async function run() {
     results.push(['FAIL', 'шрифт Inter', e.message]);
   }
 
-  // Боевая сборка: курсор скрыт, галереи нет, шрифт свой; в dev курсор виден.
+  // Боевая сборка: на терминале (сайт по имени сервера) курсор скрыт, на самом сервере (localhost) — виден;
+  // галереи нет, шрифт свой; в dev курсор виден.
   try {
     const cursorOf = () => cdp.eval(`(() => { const b = [...document.querySelectorAll('body *')].find((el) => (el.innerText || '').trim() === 'Начать');
       return { cls: document.documentElement.classList.contains('hide-cursor'), cursor: getComputedStyle(b).cursor }; })()`);
-    await open(`http://127.0.0.1:${P.preview}/?gallery`);
-    const prod = await cursorOf();
+    await open(`http://${TERMINAL_HOST}:${P.preview}/?gallery`);
+    const terminal = await cursorOf();
     await click('ҚАЗ');
     await waitText('Рұқсаттаманы алу ережелері');
     const prodFonts = await fontsOf();
+    await open(`http://127.0.0.1:${P.preview}/`);
+    const server = await cursorOf();
     await open();
     const dev = await cursorOf();
-    assert(prod.cls && prod.cursor === 'none' && !dev.cls && dev.cursor === 'pointer', `prod ${JSON.stringify(prod)}, dev ${JSON.stringify(dev)}`);
+    assert(terminal.cls && terminal.cursor === 'none' && !server.cls && server.cursor === 'pointer' && !dev.cls && dev.cursor === 'pointer',
+      `терминал ${JSON.stringify(terminal)}, сервер ${JSON.stringify(server)}, dev ${JSON.stringify(dev)}`);
     assert(fontsOk(prodFonts), `шрифт в боевой сборке: ${JSON.stringify(prodFonts)}`);
-    results.push(['PASS', 'боевая сборка: курсор скрыт, ?gallery не работает, Inter свой; в dev курсор виден', '']);
+    results.push(['PASS', 'боевая сборка: на терминале курсор скрыт, на самом сервере (localhost) виден, ?gallery не работает, Inter свой; в dev курсор виден', '']);
   } catch (e) {
     results.push(['FAIL', 'боевая сборка', e.message]);
   }
@@ -495,7 +501,7 @@ async function run() {
   const external = [...new Set(cdp.events
     .filter((e) => e.method === 'Network.requestWillBeSent')
     .map((e) => e.params.request.url)
-    .filter((u) => /^https?:/.test(u) && !/^https?:\/\/(127\.0\.0\.1|localhost)[:/]/.test(u)))];
+    .filter((u) => /^https?:/.test(u) && !/^https?:\/\/(127\.0\.0\.1|localhost|terminal\.test)[:/]/.test(u)))]; // terminal.test — TERMINAL_HOST
   results.push([external.length === 0 ? 'PASS' : 'FAIL', 'нет запросов во внешнюю сеть', external.slice(0, 5).join(' ')]);
 
   const proxied = allCalls.filter((c) => c.srv === 'api' && /\/api\/hardware|cards-ended/.test(c.path));
@@ -530,6 +536,9 @@ try {
   browser = spawn(findBrowser(), [
     '--headless=new', `--remote-debugging-port=${P.cdp}`, `--user-data-dir=${path.join(TMP, 'profile')}`,
     '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream',
+    // Без прокси: имя «терминала» подменяется только в самом браузере, прокси о нём не знает. Внешних запросов нет и так.
+    // Именно direct:// — --no-proxy-server Chromium 103 не отключает системный прокси.
+    `--host-resolver-rules=MAP ${TERMINAL_HOST} 127.0.0.1`, '--proxy-server=direct://',
     '--no-first-run', '--no-default-browser-check', '--window-size=1920,1080', 'about:blank',
   ], { stdio: 'ignore' });
   let wsUrl;

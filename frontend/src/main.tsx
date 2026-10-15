@@ -13,10 +13,12 @@ import App from './App.tsx'
 const params = new URLSearchParams(window.location.search)
 
 // Сенсорный киоск: в боевой сборке курсор мыши скрыт, как в легаси (_Layout.cshtml). В dev — виден.
-// На служебных страницах курсор нужен: на распознавании удостоверения рамку карты рисуют и мышью,
-// диагностику открывают и на сервере через RDP.
+// На служебных страницах курсор нужен: на распознавании удостоверения рамку карты рисуют и мышью.
+// Виден и когда сайт открыт на самом сервере (localhost, через RDP — там работают мышью): терминалы
+// открывают сайт по адресу сервера, не по localhost, и у них курсор остаётся скрытым.
 const servicePage = params.has('idscan') || params.has('diag')
-if (import.meta.env.PROD && !servicePage) document.documentElement.classList.add('hide-cursor')
+const onServer = ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname)
+if (import.meta.env.PROD && !servicePage && !onServer) document.documentElement.classList.add('hide-cursor')
 
 const root = createRoot(document.getElementById('root')!)
 
