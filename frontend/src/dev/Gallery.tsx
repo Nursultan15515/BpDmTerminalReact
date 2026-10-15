@@ -35,9 +35,6 @@ export function Gallery() {
       <p style={{ color: '#5a6675', marginTop: 4 }}>
         Распознавание удостоверения (камера, файл, тестовая карта): <a href="/?idscan">/?idscan</a> — есть и в боевой сборке.
       </p>
-      <p style={{ color: '#5a6675', marginTop: 4 }}>
-        Диагностика (связь сервера с БД и SOAP): <a href="/?diag">/?diag</a> — есть и в боевой сборке.
-      </p>
 
       <div style={{ marginTop: 18, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <b>Соотношение:</b>

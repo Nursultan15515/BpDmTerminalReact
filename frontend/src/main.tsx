@@ -16,9 +16,8 @@ const params = new URLSearchParams(window.location.search)
 // На служебных страницах курсор нужен: на распознавании удостоверения рамку карты рисуют и мышью.
 // Виден и когда сайт открыт на самом сервере (localhost, через RDP — там работают мышью): терминалы
 // открывают сайт по адресу сервера, не по localhost, и у них курсор остаётся скрытым.
-const servicePage = params.has('idscan') || params.has('diag')
 const onServer = ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname)
-if (import.meta.env.PROD && !servicePage && !onServer) document.documentElement.classList.add('hide-cursor')
+if (import.meta.env.PROD && !params.has('idscan') && !onServer) document.documentElement.classList.add('hide-cursor')
 
 const root = createRoot(document.getElementById('root')!)
 
@@ -26,10 +25,6 @@ const root = createRoot(document.getElementById('root')!)
 // камеру документа и рамку для экрана сканирования), грузится отдельным куском — киоску сама страница не нужна.
 if (params.has('idscan')) {
   import('./idscan/IdScanPage').then(({ IdScanPage }) => root.render(<IdScanPage />))
-} else if (params.has('diag')) {
-  // ?diag — диагностика связи сервера с БД и SOAP-сервисом. Есть и в боевой сборке: открывается с экрана
-  // настройки терминала или прямо на сервере. Отдельный кусок, как ?idscan.
-  import('./diag/DiagPage').then(({ DiagPage }) => root.render(<DiagPage />))
 } else if (import.meta.env.DEV && params.has('gallery')) {
   // Стенд (только dev): ?gallery — все экраны на всех языках и сценарии заглушек.
   import('./dev/Gallery').then(({ Gallery }) => root.render(<Gallery />))

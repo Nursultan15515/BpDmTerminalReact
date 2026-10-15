@@ -122,20 +122,6 @@ export function CameraIcon({ size = 34, color = '#fff' }: { size?: number; color
   );
 }
 
-export function PulseIcon({ size = 34, color = '#fff' }: { size?: number; color?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <path
-        d="M3 12 H7 L9.5 6 L14 18 L16.5 12 H21"
-        stroke={color}
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
 export function RetakeIcon({ size = 28, color = '#5A6675' }: { size?: number; color?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
